@@ -12,6 +12,7 @@ The installation will **only** be verified for `Ubuntu 20.04` with CUDA 12.2 (TO
 ## Activate environment
 ```bash
 micromamba activate xprize_pipeline
+cd "$HOME/BiodivX-XPRIZE-ML-pipeline"
 ```
 
 ## Run pipeline
