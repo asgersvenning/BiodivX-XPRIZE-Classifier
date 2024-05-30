@@ -18,7 +18,7 @@ cd "$HOME/BiodivX-XPRIZE-ML-pipeline"
 ## Run pipeline
 Input should be a path to a zip-folder containing images.
 ```bash
-python pipeline.py --input <INPUT.ZIP>
+python pipeline.py --input <INPUT.ZIP> [--output <OUTPUT.ZIP>]
 ```
 
 # Output
