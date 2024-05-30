@@ -2,7 +2,7 @@
 Simple repository for managing the overall CV ML execution pipeline of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
 # Installation
-The installation will **only** be verified for `Ubuntu 20.04` with CUDA 12.2 (TODO: driver version!). The system must be pre-installed with `Python` (TODO: version?) and `micromamba`.
+The installation will **only** be verified for `Ubuntu 20.04` with `CUDA 12.2` (TODO: NVIDIA driver version `450.51`?). The system must be pre-installed with `Python` (TODO: version `3.11`?) and `micromamba`.
 
 ```bash
 . install.sh
