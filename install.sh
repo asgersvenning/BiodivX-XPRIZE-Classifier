@@ -40,24 +40,28 @@ if micromamba env list | grep -q "^$ENV_NAME$"; then
     echo "Environment $ENV_NAME already exists. Skipping creation."
 else
     echo "Creating environment $ENV_NAME with Python $REQUIRED_PYTHON_VERSION."
-    micromamba create --name $ENV_NAME python="$REQUIRED_PYTHON_VERSION" -y
+    if ! micromamba create --name $ENV_NAME python="$REQUIRED_PYTHON_VERSION" -y; then
+        echo "Failed to create the environment $ENV_NAME with Python $REQUIRED_PYTHON_VERSION."
+        exit 1
+    fi
 fi
-micromamba run -n "$ENV_NAME" bash << EOF
+
+script -q -c "micromamba run -n \"\$ENV_NAME\" bash << 'EOF'
 
 # Check Python version, could be an issue if the user has created the ENV_NAME micromamba environment manually beforehand with the wrong Python version 
 PYTHON_VERSION=\$(python --version 2>&1 | awk '{print \$2}')
-if [[ "\$PYTHON_VERSION" != "\$REQUIRED_PYTHON_VERSION"* ]]; then
-    echo "Warning: The environment $ENV_NAME is using Python \$PYTHON_VERSION, but this script requires Python \$REQUIRED_PYTHON_VERSION."
+if [[ \"\$PYTHON_VERSION\" != \"\$REQUIRED_PYTHON_VERSION\"* ]]; then
+    echo \"Warning: The environment \$ENV_NAME is using Python \$PYTHON_VERSION, but this script requires Python \$REQUIRED_PYTHON_VERSION.\"
 fi
 
 # Install torch; assumes the system is using CUDA>=12.1
 micromamba install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge
 
-CWD=$(pwd)
+CWD=\$(pwd)
 
 # Install flat-bug; i.e. Multiple Object Detection and Segmentation
-cd "$HOME"
-if [ -d "flat-bug" ]; then
+cd \$HOME
+if [ -d \"flat-bug\" ]; then
   git clone git@github.com:darsa-group/flat-bug.git
 fi
 cd flat-bug
@@ -67,23 +71,23 @@ git pull
 pip install -e .
 
 # Install Clustering module
-cd "$HOME"
-if [ -d "flat-bug-clustering" ]; then
+cd \$HOME
+if [ -d \"flat-bug-clustering\" ]; then
   git clone git@github.com:GuillaumeMougeot/flat-bug-clustering.git
 fi
 cd flat-bug-clustering
 pip install -e .
-cd "$HOME"
+cd \$HOME
 
 # Install Classification module
-cd "$HOME"
-if [ -d "xprize-classifier" ]; then
+cd \$HOME
+if [ -d \"xprize-classifier\" ]; then
   git clone git@github.com:GuillaumeMougeot/xprize-classifier
 fi
 cd xprize-classifier
 pip install -e .
 
 # Return to original directory
-cd "$CWD"
+cd \"\$CWD\"
 
-EOF
+EOF" /dev/null 
