@@ -44,6 +44,7 @@ else
 fi
 micromamba run -n "$ENV_NAME" bash << EOF
 
+# Check Python version, could be an issue if the user has created the ENV_NAME micromamba environment manually beforehand with the wrong Python version 
 PYTHON_VERSION=\$(python --version 2>&1 | awk '{print \$2}')
 if [[ "\$PYTHON_VERSION" != "\$REQUIRED_PYTHON_VERSION"* ]]; then
     echo "Warning: The environment $ENV_NAME is using Python \$PYTHON_VERSION, but this script requires Python \$REQUIRED_PYTHON_VERSION."
