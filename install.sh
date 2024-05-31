@@ -1,12 +1,13 @@
 #!/bin/bash
 # Preliminary installation script for the pipeline dependencies and environment
 
+# This script is designed to be run on a fresh Ubuntu 22.04 installation with CUDA 12.2 and NVIDIA driver version 535.161.07.
 # Static installation options
 ENV_NAME="xprize_pipeline"
-REQUIRED_PYTHON_VERSION="3.11"
-UBUNTU_VERSION="20.04"
+REQUIRED_PYTHON_VERSION="3.11.5"
+UBUNTU_VERSION="22.04"
 CUDA_VERSION="12.2"
-NVIDIA_DRIVER_VERSION="450.51"
+NVIDIA_DRIVER_VERSION="535.161.07"
 
 # Function to check OS and CUDA version
 check_system_requirements() {
@@ -28,7 +29,7 @@ check_system_requirements() {
 
 if ! command -v micromamba &> /dev/null; then
     echo "micromamba could not be found. Please install micromamba before running this script."
-    exit 1
+    return
 fi
 
 # Check system requirements
@@ -36,58 +37,114 @@ check_system_requirements
 
 # Prepare environment
 # Check if the environment exists
-if micromamba env list | grep -q "^$ENV_NAME$"; then
+if micromamba env list | grep -Pq "^\s+$ENV_NAME\s+" > /dev/null; then
     echo "Environment $ENV_NAME already exists. Skipping creation."
+    echo "WARNING: If the environment was created manually, the guarantees of this script are void. Use at your own risk."
 else
     echo "Creating environment $ENV_NAME with Python $REQUIRED_PYTHON_VERSION."
-    if ! micromamba create --name $ENV_NAME python="$REQUIRED_PYTHON_VERSION" -y; then
+    if ! micromamba create --name $ENV_NAME python="$REQUIRED_PYTHON_VERSION" -y -c conda-forge; then
         echo "Failed to create the environment $ENV_NAME with Python $REQUIRED_PYTHON_VERSION."
-        exit 1
+        return
     fi
 fi
 
-script -q -c "micromamba run -n \"\$ENV_NAME\" bash << 'EOF'
+micromamba activate $ENV_NAME
 
 # Check Python version, could be an issue if the user has created the ENV_NAME micromamba environment manually beforehand with the wrong Python version 
-PYTHON_VERSION=\$(python --version 2>&1 | awk '{print \$2}')
-if [[ \"\$PYTHON_VERSION\" != \"\$REQUIRED_PYTHON_VERSION\"* ]]; then
-    echo \"Warning: The environment \$ENV_NAME is using Python \$PYTHON_VERSION, but this script requires Python \$REQUIRED_PYTHON_VERSION.\"
+PYTHON_VERSION=$(python --version 2>&1 | awk '{print $2}')
+if [[ "$PYTHON_VERSION" != "$REQUIRED_PYTHON_VERSION"* ]]; then
+    echo \"Error: The environment \$ENV_NAME is using Python \$PYTHON_VERSION, but this script requires Python \$REQUIRED_PYTHON_VERSION.\"
+    return
 fi
 
 # Install torch; assumes the system is using CUDA>=12.1
-micromamba install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge
+if [ ! "$(pip show torch)" ]; then
+    if ! micromamba install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge; then
+        echo "Failed to install torch."
+        return
+    fi
+else
+    echo "torch already installed. Skipping installation."
 
-CWD=\$(pwd)
+fi
+
+# Install gradio
+if [ ! "$(pip show gradio)" ]; then
+    if ! micromamba install gradio -c conda-forge -y; then
+        echo "Failed to install gradio."
+        return
+    fi
+else
+    echo "gradio already installed. Skipping installation."
+fi
+
+CWD=$(pwd)
 
 # Install flat-bug; i.e. Multiple Object Detection and Segmentation
-cd \$HOME
-if [ -d \"flat-bug\" ]; then
-  git clone git@github.com:darsa-group/flat-bug.git
+if [ ! "$(pip show flat-bug)" ]; then
+    cd $HOME
+    if [ ! -d "flat-bug" ]; then
+        if ! git clone git@github.com:darsa-group/flat-bug.git; then
+            echo "Failed to clone flat-bug repository."
+            return
+        fi
+    fi
+    cd flat-bug
+    git fetch
+    git checkout dev_experiments
+    git pull
+    pip install -e .
+else
+    echo "flat-bug already installed. Skipping installation."
 fi
-cd flat-bug
-git fetch
-git checkout dev_experiments
-git pull
-pip install -e .
 
 # Install Clustering module
-cd \$HOME
-if [ -d \"flat-bug-clustering\" ]; then
-  git clone git@github.com:GuillaumeMougeot/flat-bug-clustering.git
+if [ ! "$(pip show flat-bug-clustering)" ]; then
+    cd $HOME
+    if [ ! -d "flat-bug-clustering" ]; then
+        if ! git clone git@github.com:GuillaumeMougeot/flat-bug-clustering.git; then
+            echo "Failed to clone flat-bug-clustering repository."
+            return
+        fi
+    fi
+    cd flat-bug-clustering
+    pip install -e .
+else
+    echo "flat-bug-clustering already installed. Skipping installation."
 fi
-cd flat-bug-clustering
-pip install -e .
-cd \$HOME
 
 # Install Classification module
-cd \$HOME
-if [ -d \"xprize-classifier\" ]; then
-  git clone git@github.com:GuillaumeMougeot/xprize-classifier
+if [ ! "$(pip show xprize-classifier)" ]; then
+    cd $HOME
+    if [ ! -d "xprize-classifier" ]; then
+        if ! git clone git@github.com:GuillaumeMougeot/xprize-classifier; then
+            echo "Failed to clone xprize-classifier repository."
+            return
+        fi
+    fi
+    cd xprize-classifier
+    pip install -e .
+else
+    echo "xprize-classifier already installed. Skipping installation."
 fi
-cd xprize-classifier
-pip install -e .
 
 # Return to original directory
-cd \"\$CWD\"
+cd "$CWD"
 
-EOF" /dev/null 
+# Deactivate the environment to restore the original environment
+micromamba deactivate
+
+# Print completion message
+echo "Installation complete."
+echo ""
+
+# Print instructions
+echo "INSTRUCTIONS:"
+echo "  Please activate the environment before running the pipeline:"
+echo "      'micromamba activate $ENV_NAME' "
+echo "  You can deactivate the environment with:"
+echo "      'micromamba deactivate'"
+echo "  You can remove the environment with:"
+echo "      'micromamba env remove -n $ENV_NAME'"
+echo "  Run the pipeline:"
+echo "      'python pipeline.py --input <input_images.zip> [--output <output_files.zip>]'"
