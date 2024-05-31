@@ -1,20 +1,40 @@
-FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+# Stage 1: Bring in the micromamba image to copy files from it
+FROM mambaorg/micromamba:1.5.8 as micromamba
 
-# Install micromamba
-RUN apt-get update && apt-get install -y \
-    wget bzip2 curl ca-certificates \
-    && wget -qO- https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba \
-    && touch /root/.bashrc \
-    && micromamba shell init -s bash -p /opt/conda \
-    && grep -v '[ -z "\$PS1" ] && return' /root/.bashrc > /opt/conda/bashrc \
-    && apt-get clean autoremove --yes \
-    && rm -rf /var/lib/{apt,dpkg,cache,log}
+# Stage 2: The main image we are going to add micromamba to
+FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 # Set up a new user named "user" with user ID 1000
 RUN useradd -m -u 1000 user
 
+USER root
+
+# Set environment variables for micromamba
+ARG MAMBA_USER=user
+ARG MAMBA_USER_ID=1000
+ARG MAMBA_USER_GID=1000
+ENV MAMBA_USER=$MAMBA_USER
+ENV MAMBA_ROOT_PREFIX="/opt/conda"
+ENV MAMBA_EXE="/bin/micromamba"
+
+# Copy micromamba files from the micromamba stage
+COPY --from=micromamba "$MAMBA_EXE" "$MAMBA_EXE"
+COPY --from=micromamba /usr/local/bin/_activate_current_env.sh /usr/local/bin/_activate_current_env.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_shell.sh /usr/local/bin/_dockerfile_shell.sh
+COPY --from=micromamba /usr/local/bin/_entrypoint.sh /usr/local/bin/_entrypoint.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_initialize_user_accounts.sh /usr/local/bin/_dockerfile_initialize_user_accounts.sh
+COPY --from=micromamba /usr/local/bin/_dockerfile_setup_root_prefix.sh /usr/local/bin/_dockerfile_setup_root_prefix.sh
+
+# Initialize user accounts and set up the root prefix
+RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
+    /usr/local/bin/_dockerfile_setup_root_prefix.sh
+
 # Switch to the "user" user
-USER user
+USER $MAMBA_USER
+
+# Use the micromamba shell
+SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
+
 
 # Set home to the user's home directory and ensure PATH includes user's local bin
 ENV HOME=/home/user \
