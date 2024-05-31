@@ -1,5 +1,14 @@
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
+# Install micromamba
+RUN apt-get update && apt-get install -y wget bzip2 \
+    && wget -qO-  https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj bin/micromamba \
+    && touch /root/.bashrc \
+    && ./bin/micromamba shell init -s bash -p /opt/conda  \
+    && grep -v '[ -z "\$PS1" ] && return' /root/.bashrc  > /opt/conda/bashrc   # this line has been modified \
+    && apt-get clean autoremove --yes \
+    && rm -rf /var/lib/{apt,dpkg,cache,log}
+
 # Set up a new user named "user" with user ID 1000
 RUN useradd -m -u 1000 user
 
@@ -12,15 +21,6 @@ ENV HOME=/home/user \
 
 # Set the working directory to the user's home directory
 WORKDIR $HOME/app
-
-# Install micromamba
-RUN apt-get update && apt-get install -y wget bzip2 \
-    && wget -qO-  https://micromamba.snakepit.net/api/micromamba/linux-64/latest | tar -xvj bin/micromamba \
-    && touch /root/.bashrc \
-    && ./bin/micromamba shell init -s bash -p /opt/conda  \
-    && grep -v '[ -z "\$PS1" ] && return' /root/.bashrc  > /opt/conda/bashrc   # this line has been modified \
-    && apt-get clean autoremove --yes \
-    && rm -rf /var/lib/{apt,dpkg,cache,log}
 
 # Copy the current directory contents into the container at /home/user/app with the new user ownership
 COPY --chown=user:user . /home/user/app
