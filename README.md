@@ -1,3 +1,14 @@
+---
+title: BiodivX XPRIZE ML Pipeline
+emoji: 👁
+colorFrom: indigo
+colorTo: pink
+sdk: gradio
+sdk_version: 4.32.1
+app_file: app.py
+pinned: false
+---
+
 # BiodivX-XPRIZE-ML-pipeline
 Simple repository for managing the overall CV ML execution pipeline of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
@@ -10,6 +21,7 @@ The installation will **only** be verified for `Ubuntu 20.04` with `CUDA 12.2` (
 
 # Execution
 ## Activate environment
+
 ```bash
 micromamba activate xprize_pipeline
 cd "$HOME/BiodivX-XPRIZE-ML-pipeline"
@@ -17,8 +29,9 @@ cd "$HOME/BiodivX-XPRIZE-ML-pipeline"
 
 ## Run pipeline
 Input should be a path to a zip-folder containing images.
+
 ```bash
-python pipeline.py --input <INPUT.ZIP> [--output <OUTPUT.ZIP>]
+python pipeline.py [-h] -i INPUT_ZIP_PATH [-o OUTPUT_ZIP_PATH]
 ```
 
 # Output
