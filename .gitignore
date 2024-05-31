@@ -2,3 +2,5 @@ test.zip
 output.zip
 test/**
 __pycache__/**
+weights.pt
+flagged/**

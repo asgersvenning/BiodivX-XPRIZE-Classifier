@@ -1,5 +1,5 @@
 ---
-title: BiodivX XPRIZE ML Pipeline
+title: BiodivX XPRIZE Localizer
 emoji: 👁
 colorFrom: indigo
 colorTo: pink
@@ -9,7 +9,7 @@ app_file: app.py
 pinned: false
 ---
 
-# BiodivX-XPRIZE-ML-pipeline
+# BiodivX-XPRIZE-Localizer
 Simple repository for managing the overall CV ML execution pipeline of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
 # Installation
@@ -23,8 +23,8 @@ The installation will **only** be verified for `Ubuntu 20.04` with `CUDA 12.2` (
 ## Activate environment
 
 ```bash
-micromamba activate xprize_pipeline
-cd "$HOME/BiodivX-XPRIZE-ML-pipeline"
+micromamba activate xprize_localizer
+cd "$HOME/BiodivX-XPRIZE-Localizer"
 ```
 
 ## Run pipeline

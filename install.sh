@@ -3,7 +3,7 @@
 
 # This script is designed to be run on a fresh Ubuntu 22.04 installation with CUDA 12.2 and NVIDIA driver version 535.161.07.
 # Static installation options
-ENV_NAME="xprize_pipeline"
+ENV_NAME="xprize_localizer"
 REQUIRED_PYTHON_VERSION="3.11.5"
 UBUNTU_VERSION="22.04"
 CUDA_VERSION="12.2"
@@ -98,36 +98,6 @@ else
     echo "flat-bug already installed. Skipping installation."
 fi
 
-# Install Clustering module
-if [ ! "$(pip show flat-bug-clustering)" ]; then
-    cd $HOME
-    if [ ! -d "flat-bug-clustering" ]; then
-        if ! git clone git@github.com:GuillaumeMougeot/flat-bug-clustering.git; then
-            echo "Failed to clone flat-bug-clustering repository."
-            return
-        fi
-    fi
-    cd flat-bug-clustering
-    pip install -e .
-else
-    echo "flat-bug-clustering already installed. Skipping installation."
-fi
-
-# Install Classification module
-if [ ! "$(pip show xprize-classifier)" ]; then
-    cd $HOME
-    if [ ! -d "xprize-classifier" ]; then
-        if ! git clone git@github.com:GuillaumeMougeot/xprize-classifier; then
-            echo "Failed to clone xprize-classifier repository."
-            return
-        fi
-    fi
-    cd xprize-classifier
-    pip install -e .
-else
-    echo "xprize-classifier already installed. Skipping installation."
-fi
-
 # Return to original directory
 cd "$CWD"
 
@@ -146,5 +116,5 @@ echo "  You can deactivate the environment with:"
 echo "      'micromamba deactivate'"
 echo "  You can remove the environment with:"
 echo "      'micromamba env remove -n $ENV_NAME'"
-echo "  Run the pipeline:"
-echo "      'python pipeline.py -i <input_images.zip> [-o <output_files.zip>]'"
+echo "  Run the app:"
+echo "      'gradio app.py --demo-name=app'"

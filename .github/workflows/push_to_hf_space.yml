@@ -12,8 +12,8 @@ jobs:
     - name: Sync with Hugging Face
       uses: nateraw/huggingface-sync-action@v0.0.4
       with:
-        github_repo_id: asgersvenning/BiodivX-XPRIZE-ML-pipeline
-        huggingface_repo_id: asgersvenning/BiodivX-XPRIZE-ML-pipeline
+        github_repo_id: asgersvenning/BiodivX-XPRIZE-Localizer
+        huggingface_repo_id: asgersvenning/BiodivX-XPRIZE-Localizer
         repo_type: space
         space_sdk: gradio
         hf_token: ${{ secrets.HF_TOKEN }}
