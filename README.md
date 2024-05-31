@@ -21,6 +21,7 @@ The installation will **only** be verified for `Ubuntu 20.04` with `CUDA 12.2` (
 
 # Execution
 ## Activate environment
+
 ```bash
 micromamba activate xprize_pipeline
 cd "$HOME/BiodivX-XPRIZE-ML-pipeline"
@@ -28,8 +29,9 @@ cd "$HOME/BiodivX-XPRIZE-ML-pipeline"
 
 ## Run pipeline
 Input should be a path to a zip-folder containing images.
+
 ```bash
-python pipeline.py --input <INPUT.ZIP> [--output <OUTPUT.ZIP>]
+python pipeline.py [-h] -i INPUT_ZIP_PATH [-o OUTPUT_ZIP_PATH]
 ```
 
 # Output

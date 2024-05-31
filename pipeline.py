@@ -2,14 +2,17 @@
 # We will run each of the dependency scripts as a subprocess or os.system
 # Script will also handle input-output formatting
 
-import os
-import gradio as gr
+import zipfile, argparse
 
-import zipfile
+if __name__ == "__main__":
+    args_parser = argparse.ArgumentParser()
+    args_parser.add_argument('-i', '--input_zip_path', type=str, help='Path to the input zip file', required=True)
+    args_parser.add_argument('-o', '--output_zip_path', type=str, help='Path to the output zip file', default='output.zip', required=False)
+    args = args_parser.parse_args()
 
-# For now I just want a **VERY** simply dummy script that can take a zip-folder of files and returns a new zip-folder with a single text file containing the text of all the files in the original zip-folder
+    input_zip_path = args.input_zip_path
+    output_zip_path = args.output_zip_path
 
-def pipeline(input_zip_path, output_zip_path):
     # Read the input zip file contents 
     input_content = []
     with zipfile.ZipFile(input_zip_path, 'r') as z:
@@ -21,16 +24,4 @@ def pipeline(input_zip_path, output_zip_path):
     with zipfile.ZipFile(output_zip_path, 'w') as z:
         with z.open('output.txt', 'w') as f:
             f.write('\n'.join(input_content).encode('utf-8'))
-
-    return output_zip_path
-
-# Define the input-output format
-inputs = gr.inputs.File(label="Input Zip File")
-outputs = gr.outputs.File(label="Output Zip File")
-
-# Define the interface
-interface = gr.Interface(fn=pipeline, inputs=inputs, outputs=outputs, title="Pipeline")
-
-if __name__ == "__main__":
-    interface.launch()
 
