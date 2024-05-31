@@ -4,8 +4,8 @@ FROM mambaorg/micromamba:1.5.8 as micromamba
 # Stage 2: The main image we are going to add micromamba to
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
-# Install necessary packages including openssh-client
-RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client && \
+# Install necessary packages including openssh-client, lsb-release, and other dependencies
+RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client lsb-release git && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up a new user named "user" with user ID 1000
@@ -67,4 +67,5 @@ RUN ./install.sh
 EXPOSE 7860
 
 # Command to run your Gradio app
-CMD ["sh", "-c", "source /opt/conda/etc/profile.d/conda.sh && micromamba activate xprize_pipeline && python app.py"]
+ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
+CMD ["sh", "-c", "source /opt/conda/etc/profile.d/conda.sh && micromamba activate <NAME> && python app.py"]

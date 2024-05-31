@@ -1,6 +1,20 @@
 #!/bin/bash
 # Preliminary installation script for the pipeline dependencies and environment
 
+# Function to check if the script is running interactively
+is_interactive() {
+    [[ $- == *i* ]]
+}
+
+# Function to handle errors
+handle_error() {
+    if is_interactive; then
+        return 1
+    else
+        exit 1
+    fi
+}
+
 # This script is designed to be run on a fresh Ubuntu 22.04 installation with CUDA 12.2 and NVIDIA driver version 535.161.07.
 # Static installation options
 ENV_NAME="xprize_localizer"
@@ -29,7 +43,7 @@ check_system_requirements() {
 
 if ! command -v micromamba &> /dev/null; then
     echo "micromamba could not be found. Please install micromamba before running this script."
-    return
+    handle_error
 fi
 
 # Check system requirements
@@ -44,35 +58,36 @@ else
     echo "Creating environment $ENV_NAME with Python $REQUIRED_PYTHON_VERSION."
     if ! micromamba create --name $ENV_NAME python="$REQUIRED_PYTHON_VERSION" -y -c conda-forge; then
         echo "Failed to create the environment $ENV_NAME with Python $REQUIRED_PYTHON_VERSION."
-        return
+        handle_error
     fi
 fi
 
+# Initalize the shell with micromamba and activate the environment
+eval "$(micromamba shell hook --shell bash)"
 micromamba activate $ENV_NAME
 
 # Check Python version, could be an issue if the user has created the ENV_NAME micromamba environment manually beforehand with the wrong Python version 
 PYTHON_VERSION=$(python --version 2>&1 | awk '{print $2}')
 if [[ "$PYTHON_VERSION" != "$REQUIRED_PYTHON_VERSION"* ]]; then
     echo \"Error: The environment \$ENV_NAME is using Python \$PYTHON_VERSION, but this script requires Python \$REQUIRED_PYTHON_VERSION.\"
-    return
+    handle_error
 fi
 
 # Install torch; assumes the system is using CUDA>=12.1
 if [ ! "$(pip show torch)" ]; then
     if ! micromamba install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia -c conda-forge; then
         echo "Failed to install torch."
-        return
+        handle_error
     fi
 else
     echo "torch already installed. Skipping installation."
-
 fi
 
 # Install gradio
 if [ ! "$(pip show gradio)" ]; then
     if ! micromamba install gradio -c conda-forge -y; then
         echo "Failed to install gradio."
-        return
+        handle_error
     fi
 else
     echo "gradio already installed. Skipping installation."
@@ -86,7 +101,7 @@ if [ ! "$(pip show flat-bug)" ]; then
     if [ ! -d "flat-bug" ]; then
         if ! git clone git@github.com:darsa-group/flat-bug.git; then
             echo "Failed to clone flat-bug repository."
-            return
+            handle_error
         fi
     fi
     cd flat-bug
