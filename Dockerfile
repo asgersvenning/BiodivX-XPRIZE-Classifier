@@ -38,9 +38,8 @@ RUN --mount=type=secret,id=GithubToken \
     mkdir -p /home/user/.ssh && \
     cat /run/secrets/GithubToken | iconv -f utf-8 -t ascii//TRANSLIT > /home/user/.ssh/id_rsa && \
     dos2unix /home/user/.ssh/id_rsa && \
-    ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
-    chown user:user /home/user/.ssh/id_rsa /home/user/.ssh/id_rsa.pub && \
     chmod 600 /home/user/.ssh/id_rsa && \
+    ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
     chmod 644 /home/user/.ssh/id_rsa.pub && \
     ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
     chown -R user:user /home/user/.ssh && \
