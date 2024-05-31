@@ -51,8 +51,8 @@ RUN --mount=type=secret,id=GithubToken \
 
 # Debug: Check the hashes match the expected value
 RUN --mount=type=secret,id=GithubToken \
-    test "$(sha256sum /run/secrets/GithubToken | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM" && \
-    test "$(sha256sum /home/user/.ssh/id_rsa | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM"
+    test "$(sha256sum /run/secrets/GithubToken | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM" && echo "Secrets match" || echo "Secrets do not match" && \
+    test "$(sha256sum /home/user/.ssh/id_rsa | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM" && echo "Secrets match" || echo "Secrets do not match"
 
 # Switch to the "user" user
 USER $MAMBA_USER
