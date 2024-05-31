@@ -46,15 +46,19 @@ RUN --mount=type=secret,id=EncryptionPassphrase \
 
 # Add SSH key secret and perform necessary setup as root user
 RUN openssl enc -aes-256-cbc -d -in /home/user/.ssh/id_rsa.enc -out /home/user/.ssh/id_rsa -pass file:/home/user/.ssh/passphrase && \
-    chmod 600 /home/user/.ssh/id_rsa && \
-    ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
-    chmod 644 /home/user/.ssh/id_rsa.pub && \
-    ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
-    chown -R user:user /home/user/.ssh && \
-    cat <<EOF > tmp
-Host *
-    StrictHostKeyChecking no
-EOF
+    chmod 600 /home/user/.ssh/id_rsa
+
+# Generate the public key
+RUN ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
+    chmod 644 /home/user/.ssh/id_rsa.pub
+
+# Add GitHub to known hosts
+RUN ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
+    chown -R user:user /home/user/.ssh
+
+# Create SSH config
+RUN echo "Host *\n    StrictHostKeyChecking no\n" > /home/user/.ssh/config && \
+    chmod 600 /home/user/.ssh/config
 
 # Debug: Load the expected SHA256SUM of the SSH key
 ARG GithubTokenSHA256SUM
