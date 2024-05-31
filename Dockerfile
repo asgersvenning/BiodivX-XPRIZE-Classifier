@@ -44,7 +44,7 @@ RUN --mount=type=secret,id=GithubToken \
     chmod 644 /home/user/.ssh/id_rsa.pub && \
     ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
     chown -R user:user /home/user/.ssh && \
-    echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > /home/user/.ssh/config'
+    echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > /home/user/.ssh/config
 
 # Debug: Load the expected SHA256SUM of the SSH key
 ARG GithubTokenSHA256SUM
