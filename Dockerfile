@@ -29,12 +29,19 @@ COPY --from=micromamba /usr/local/bin/_dockerfile_setup_root_prefix.sh /usr/loca
 RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
     /usr/local/bin/_dockerfile_setup_root_prefix.sh
 
+# Add SSH key secret and perform necessary setup as root user
+RUN --mount=type=secret,id=GithubToken \
+    mkdir -p /home/user/.ssh && \
+    cat /run/secrets/GithubToken > /home/user/.ssh/id_rsa && \
+    chmod 600 /home/user/.ssh/id_rsa && \
+    ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
+    chown -R $MAMBA_USER:$MAMBA_USER /home/user/.ssh
+
 # Switch to the "user" user
 USER $MAMBA_USER
 
 # Use the micromamba shell
 SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
-
 
 # Set home to the user's home directory and ensure PATH includes user's local bin
 ENV HOME=/home/user \
@@ -48,13 +55,6 @@ COPY --chown=user:user . /home/user/app
 
 # Make the setup script executable
 RUN chmod +x install.sh
-
-# Add SSH key secret and perform necessary setup as non-root user
-RUN --mount=type=secret,id=GithubToken \
-    mkdir -p /home/user/.ssh && \
-    cat /run/secrets/GithubToken > /home/user/.ssh/id_rsa && \
-    chmod 600 /home/user/.ssh/id_rsa && \
-    ssh-keyscan github.com >> /home/user/.ssh/known_hosts
 
 # Run the install script
 RUN ./install.sh
