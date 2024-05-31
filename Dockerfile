@@ -60,6 +60,9 @@ COPY --chown=user:user . /home/user/app
 # Make the setup script executable
 RUN chmod +x install.sh
 
+# Check if the SSH key is working
+RUN git ls-remote git@github.com:github/gitignore.git || exit 1
+
 # Run the install script
 RUN ./install.sh
 
