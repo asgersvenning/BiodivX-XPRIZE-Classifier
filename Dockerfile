@@ -99,4 +99,4 @@ EXPOSE 7860
 
 # Command to run your Gradio app
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
-CMD ["bash", "-c", "source /opt/conda/etc/profile.d/conda.sh && micromamba activate xprize_localizer && python app.py"]
+CMD ["bash", "-c", "micromamba activate xprize_localizer && python app.py"]
