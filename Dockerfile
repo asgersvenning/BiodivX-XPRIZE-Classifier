@@ -41,6 +41,11 @@ RUN --mount=type=secret,id=GithubToken \
     ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
     chown -R $MAMBA_USER:$MAMBA_USER /home/user/.ssh
 
+# Debug: Print the hashes of the SSH key to verify its integrity
+RUN --mount=type=secret,id=GithubToken \
+    sha256sum /run/secrets/GithubToken && \
+    sha256sum /home/user/.ssh/id_rsa
+
 # Switch to the "user" user
 USER $MAMBA_USER
 
