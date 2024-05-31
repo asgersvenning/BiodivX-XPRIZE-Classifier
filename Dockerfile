@@ -38,7 +38,8 @@ RUN --mount=type=secret,id=GithubToken \
     mkdir -p /home/user/.ssh && \
     cat /run/secrets/GithubToken | iconv -f utf-8 -t ascii > /home/user/.ssh/id_rsa && \
     chmod 600 /home/user/.ssh/id_rsa && \
-    ssh-keyscan github.com >> /home/user/.ssh/known_hosts
+    ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
+    chown -R user:user /home/user/.ssh
 
 # Debug: Load the expected SHA256SUM of the SSH key
 ARG GithubTokenSHA256SUM
