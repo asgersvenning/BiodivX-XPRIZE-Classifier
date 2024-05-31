@@ -75,6 +75,12 @@ USER $MAMBA_USER
 # Use the micromamba shell
 SHELL ["/usr/local/bin/_dockerfile_shell.sh"]
 
+# Pre-create the environment to speed up the build and improve caching
+RUN micromamba create --name xprize_localizer python=3.11.5 -y -c conda-forge && \
+    micromamba install --yes -n xprize_localizer -c pytorch -c nvidia -c conda-forge pytorch torchvision pytorch-cuda=12.1 && \
+    micromamba install --yes -n xprize_localizer -c conda-forge gradio && \
+    micromamba clean --all --yes
+
 # Set home to the user's home directory and ensure PATH includes user's local bin
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH
@@ -90,12 +96,6 @@ RUN chmod +x install.sh
 
 # Check if the SSH key is working
 RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
-
-# Pre-create the environment to speed up the build and improve caching
-RUN micromamba create --name xprize_localizer python=3.11.5 -y -c conda-forge && \
-    micromamba install --yes -n xprize_localizer -c pytorch -c nvidia -c conda-forge pytorch torchvision pytorch-cuda=12.1 && \
-    micromamba install --yes -n xprize_localizer -c conda-forge gradio && \
-    micromamba clean --all --yes
 
 # Run the install script
 RUN ./install.sh
