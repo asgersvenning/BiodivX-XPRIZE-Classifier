@@ -47,7 +47,7 @@ ARG GithubTokenSHA256SUM
 # Debug: Print the hashes of the SSH key to verify its integrity
 RUN --mount=type=secret,id=GithubToken \
     sha256sum /run/secrets/GithubToken && \
-    sha256sum /home/user/.ssh/id_rsa \
+    sha256sum /home/user/.ssh/id_rsa && \
     cat /run/secrets/GithubToken | tail -n 3
 
 # Debug: Check the hashes match the expected value
