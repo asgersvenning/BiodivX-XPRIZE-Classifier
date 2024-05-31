@@ -1,3 +1,5 @@
+*There is no HuggingFace Space description here, as it is created by the GitHub Action which is triggered by the push event on the main branch.*
+
 # BiodivX-XPRIZE-Localizer
 Simple repository for running insect localization of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
