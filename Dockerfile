@@ -36,10 +36,13 @@ RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
 # Print openssl version
 RUN openssl version
 
-# Add SSH key secret and perform necessary setup as root user
-RUN --mount=type=secret,id=GithubToken \
+# Add the secret passphrase for decryption
+RUN --mount=type=secret,id=EncryptionPassphrase \
     mkdir -p /home/user/.ssh && \
-    cat /run/secrets/GithubToken | tr -d '\r' > /home/user/.ssh/id_rsa && \
+    cat /run/secrets/EncryptionPassphrase | tr -d '\r' > /home/user/.ssh/passphrase
+
+# Add SSH key secret and perform necessary setup as root user
+RUN openssl enc -aes-256-cbc -d -in /home/user/.ssh/id_rsa.enc -out /home/user/.ssh/id_rsa -pass file:/home/user/.ssh/passphrase && \
     chmod 600 /home/user/.ssh/id_rsa && \
     ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
     chmod 644 /home/user/.ssh/id_rsa.pub && \
