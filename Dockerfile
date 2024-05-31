@@ -4,6 +4,10 @@ FROM mambaorg/micromamba:1.5.8 as micromamba
 # Stage 2: The main image we are going to add micromamba to
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
+# Install necessary packages including openssh-client
+RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set up a new user named "user" with user ID 1000
 RUN useradd -m -u 1000 user
 
