@@ -5,7 +5,7 @@ FROM mambaorg/micromamba:1.5.8 as micromamba
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 # Install necessary packages including openssh-client, lsb-release, and other dependencies
-RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client lsb-release git dos2unix && \
+RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client lsb-release git dos2unix openssl && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up a new user named "user" with user ID 1000
@@ -51,7 +51,10 @@ RUN openssl enc -aes-256-cbc -d -in /home/user/.ssh/id_rsa.enc -out /home/user/.
     chmod 644 /home/user/.ssh/id_rsa.pub && \
     ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
     chown -R user:user /home/user/.ssh && \
-    echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > /home/user/.ssh/config
+    cat <<EOF > tmp
+Host *
+    StrictHostKeyChecking no
+EOF
 
 # Debug: Load the expected SHA256SUM of the SSH key
 ARG GithubTokenSHA256SUM
