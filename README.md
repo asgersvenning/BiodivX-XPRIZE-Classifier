@@ -1,3 +1,14 @@
+---
+title: BiodivX XPRIZE ML Pipeline
+emoji: 👁
+colorFrom: indigo
+colorTo: pink
+sdk: gradio
+sdk_version: 4.32.1
+app_file: app.py
+pinned: false
+---
+
 # BiodivX-XPRIZE-ML-pipeline
 Simple repository for managing the overall CV ML execution pipeline of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
