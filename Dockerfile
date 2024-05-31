@@ -38,9 +38,13 @@ RUN --mount=type=secret,id=GithubToken \
     mkdir -p /home/user/.ssh && \
     cat /run/secrets/GithubToken | iconv -f utf-8 -t ascii//TRANSLIT > /home/user/.ssh/id_rsa && \
     dos2unix /home/user/.ssh/id_rsa && \
+    ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
+    chown user:user /home/user/.ssh/id_rsa /home/user/.ssh/id_rsa.pub && \
     chmod 600 /home/user/.ssh/id_rsa && \
+    chmod 644 /home/user/.ssh/id_rsa.pub && \
     ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
-    chown -R user:user /home/user/.ssh
+    chown -R user:user /home/user/.ssh && \
+    echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > /home/user/.ssh/config'
 
 # Debug: Load the expected SHA256SUM of the SSH key
 ARG GithubTokenSHA256SUM
@@ -75,7 +79,7 @@ COPY --chown=user:user . /home/user/app
 RUN chmod +x install.sh
 
 # Check if the SSH key is working
-RUN GIT_SSH_COMMAND="ssh -i /home/user/.ssh/id_rsa -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no" git ls-remote git@github.com:github/gitignore.git || exit 1
+RUN git ls-remote git@github.com:github/gitignore.git || exit 1
 
 # Run the install script
 RUN ./install.sh
