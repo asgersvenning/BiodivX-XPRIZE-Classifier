@@ -89,7 +89,7 @@ COPY --chown=user:user . /home/user/app
 RUN chmod +x install.sh
 
 # Check if the SSH key is working
-RUN git ls-remote git@github.com:github/gitignore.git || exit 1
+RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
 
 # Run the install script
 RUN ./install.sh
@@ -99,4 +99,4 @@ EXPOSE 7860
 
 # Command to run your Gradio app
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
-CMD ["sh", "-c", "source /opt/conda/etc/profile.d/conda.sh && micromamba activate xprize_localizer && python app.py"]
+CMD ["bash", "-c", "source /opt/conda/etc/profile.d/conda.sh && micromamba activate xprize_localizer && python app.py"]
