@@ -1,14 +1,3 @@
----
-title: BiodivX XPRIZE Localizer
-emoji: 👁
-colorFrom: indigo
-colorTo: pink
-sdk: docker
-sdk_version: 4.32.1
-app_file: app.py
-pinned: false
----
-
 # BiodivX-XPRIZE-Localizer
 Simple repository for running insect localization of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
