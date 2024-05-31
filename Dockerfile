@@ -33,6 +33,9 @@ COPY --from=micromamba /usr/local/bin/_dockerfile_setup_root_prefix.sh /usr/loca
 RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
     /usr/local/bin/_dockerfile_setup_root_prefix.sh
 
+# Print openssl version
+RUN openssl version
+
 # Add SSH key secret and perform necessary setup as root user
 RUN --mount=type=secret,id=GithubToken \
     mkdir -p /home/user/.ssh && \
@@ -87,4 +90,4 @@ EXPOSE 7860
 
 # Command to run your Gradio app
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
-CMD ["sh", "-c", "source /opt/conda/etc/profile.d/conda.sh && micromamba activate <NAME> && python app.py"]
+CMD ["sh", "-c", "source /opt/conda/etc/profile.d/conda.sh && micromamba activate xprize_localizer && python app.py"]
