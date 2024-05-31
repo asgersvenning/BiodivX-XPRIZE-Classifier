@@ -5,7 +5,7 @@ FROM mambaorg/micromamba:1.5.8 as micromamba
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 # Install necessary packages including openssh-client, lsb-release, and other dependencies
-RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client lsb-release git && \
+RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client lsb-release git dos2unix && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up a new user named "user" with user ID 1000
@@ -36,7 +36,8 @@ RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
 # Add SSH key secret and perform necessary setup as root user
 RUN --mount=type=secret,id=GithubToken \
     mkdir -p /home/user/.ssh && \
-    cat /run/secrets/GithubToken | iconv -f utf-8 -t ascii > /home/user/.ssh/id_rsa && \
+    cat /run/secrets/GithubToken | iconv -f utf-8 -t ascii//TRANSLIT > /home/user/.ssh/id_rsa && \
+    dos2unix /home/user/.ssh/id_rsa && \
     chmod 600 /home/user/.ssh/id_rsa && \
     ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
     chown -R user:user /home/user/.ssh
