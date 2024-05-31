@@ -36,6 +36,9 @@ RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
 # Print openssl version
 RUN openssl version
 
+# Add the encrypted SSH key to the container
+COPY id_rsa.enc /home/user/.ssh/id_rsa.enc
+
 # Add the secret passphrase for decryption
 RUN --mount=type=secret,id=EncryptionPassphrase \
     mkdir -p /home/user/.ssh && \
