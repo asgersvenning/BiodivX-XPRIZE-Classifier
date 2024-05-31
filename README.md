@@ -10,7 +10,7 @@ pinned: false
 ---
 
 # BiodivX-XPRIZE-Localizer
-Simple repository for managing the overall CV ML execution pipeline of the ETH BiodivX for the XPRIZE Rainforest competition finals.
+Simple repository for running insect localization of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
 # Installation
 The installation will **only** be verified for `Ubuntu 20.04` with `CUDA 12.2` (TODO: NVIDIA driver version `450.51`?). The system must be pre-installed with `Python` (TODO: version `3.11`?) and `micromamba`.
