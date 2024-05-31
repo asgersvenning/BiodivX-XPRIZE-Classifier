@@ -36,7 +36,7 @@ RUN /usr/local/bin/_dockerfile_initialize_user_accounts.sh && \
 # Add SSH key secret and perform necessary setup as root user
 RUN --mount=type=secret,id=GithubToken \
     mkdir -p /home/user/.ssh && \
-    cat /run/secrets/GithubToken > /home/user/.ssh/id_rsa && \
+    cat /run/secrets/GithubToken | tr -d '\r' > /home/user/.ssh/id_rsa && \
     chmod 600 /home/user/.ssh/id_rsa && \
     ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
     chmod 644 /home/user/.ssh/id_rsa.pub && \
