@@ -17,8 +17,11 @@ if __name__ == "__main__":
     input_content = []
     with zipfile.ZipFile(input_zip_path, 'r') as z:
         for file in z.filelist:
+            if not file.filename.endswith('.txt'):
+                continue
             with z.open(file.filename, 'r') as f:
-                input_content.append(f.read().decode('utf-8'))
+                for line in f:
+                    input_content.append(line.decode('utf-8').strip())
 
     # Write the output zip file contents
     with zipfile.ZipFile(output_zip_path, 'w') as z:
