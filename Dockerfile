@@ -5,7 +5,7 @@ FROM mambaorg/micromamba:1.5.8 as micromamba
 FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
 
 # Install necessary packages including openssh-client, lsb-release, and other dependencies
-RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client lsb-release git dos2unix openssl && \
+RUN apt-get update && apt-get install -y wget bzip2 curl ca-certificates openssh-client lsb-release git dos2unix openssl libgl1 libglib2.0-0 && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up a new user named "user" with user ID 1000
@@ -90,6 +90,11 @@ RUN chmod +x install.sh
 
 # Check if the SSH key is working
 RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
+
+# Install large dependencies first for caching
+RUN micromamba install --yes -n base -c pytorch -c nvidia -c conda-forge pytorch torchvision pytorch-cuda=12.1 && \
+    micromamba install --yes -n base gradio -c conda-forge && \
+    micromamba clean --all --yes
 
 # Run the install script
 RUN ./install.sh
