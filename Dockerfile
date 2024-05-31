@@ -91,9 +91,10 @@ RUN chmod +x install.sh
 # Check if the SSH key is working
 RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
 
-# Install large dependencies first for caching
-RUN micromamba install --yes -n base -c pytorch -c nvidia -c conda-forge pytorch torchvision pytorch-cuda=12.1 && \
-    micromamba install --yes -n base gradio -c conda-forge && \
+# Pre-create the environment to speed up the build and improve caching
+RUN micromamba create --name xprize_localizer python=3.11.5 -y -c conda-forge && \
+    micromamba install --yes -n xprize_localizer -c pytorch -c nvidia -c conda-forge pytorch torchvision pytorch-cuda=12.1 && \
+    micromamba install --yes -n xprize_localizer -c conda-forge gradio && \
     micromamba clean --all --yes
 
 # Run the install script
