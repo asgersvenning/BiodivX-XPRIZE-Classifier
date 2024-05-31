@@ -4,7 +4,7 @@
 Simple repository for running insect localization of the ETH BiodivX for the XPRIZE Rainforest competition finals.
 
 # Installation
-The installation will **only** be verified for `Ubuntu 20.04` with `CUDA 12.2` (TODO: NVIDIA driver version `450.51`?). The system must be pre-installed with `Python` (TODO: version `3.11.5`?) and `micromamba`.
+The installation will **only** be verified for `Ubuntu 22.04` with `CUDA 12.2` with NVIDIA driver version `535.161.07`. The system must be pre-installed with `Python 3.11.5` and `micromamba`.
 
 ```bash
 . install.sh
