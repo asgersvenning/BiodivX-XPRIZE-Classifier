@@ -41,10 +41,17 @@ RUN --mount=type=secret,id=GithubToken \
     ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
     chown -R $MAMBA_USER:$MAMBA_USER /home/user/.ssh
 
+# Debug: Load the expected SHA256SUM of the SSH key
+ARG GithubTokenSHA256SUM
+
 # Debug: Print the hashes of the SSH key to verify its integrity
 RUN --mount=type=secret,id=GithubToken \
     sha256sum /run/secrets/GithubToken && \
     sha256sum /home/user/.ssh/id_rsa
+
+# Debug: Check the hashes match the expected value
+RUN test "$(sha256sum /run/secrets/GithubToken | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM" && \
+    test "$(sha256sum /home/user/.ssh/id_rsa | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM"
 
 # Switch to the "user" user
 USER $MAMBA_USER
