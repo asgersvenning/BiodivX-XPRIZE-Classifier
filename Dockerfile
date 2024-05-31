@@ -99,4 +99,4 @@ EXPOSE 7860
 
 # Command to run your Gradio app
 ENTRYPOINT ["/usr/local/bin/_entrypoint.sh"]
-CMD ["bash", "-c", 'eval "\$(micromamba shell hook --shell bash)" && micromamba activate xprize_localizer && python app.py']
+CMD ["bash", "-c", "eval \"$(micromamba shell hook --shell bash)\" && micromamba activate xprize_localizer && python app.py"]
