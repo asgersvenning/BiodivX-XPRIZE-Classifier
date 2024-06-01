@@ -17,7 +17,7 @@ handle_error() {
 
 # This script is designed to be run on a fresh Ubuntu 22.04 installation with CUDA 12.2 and NVIDIA driver version 535.161.07.
 # Static installation options
-ENV_NAME="xprize_localizer"
+ENV_NAME="xprize_classifier"
 REQUIRED_PYTHON_VERSION="3.11.5"
 UBUNTU_VERSION="22.04"
 CUDA_VERSION="12.2"
@@ -93,29 +93,6 @@ else
     echo "gradio already installed. Skipping installation."
 fi
 
-CWD=$(pwd)
-
-# Install flat-bug; i.e. Multiple Object Detection and Segmentation
-if [ ! "$(pip show flat-bug)" ]; then
-    cd $HOME
-    if [ ! -d "flat-bug" ]; then
-        if ! git clone git@github.com:darsa-group/flat-bug.git; then
-            echo "Failed to clone flat-bug repository."
-            handle_error
-        fi
-    fi
-    cd flat-bug
-    git fetch
-    git checkout dev_experiments
-    git pull
-    pip install -e .
-else
-    echo "flat-bug already installed. Skipping installation."
-fi
-
-# Return to original directory
-cd "$CWD"
-
 # Deactivate the environment to restore the original environment
 micromamba deactivate
 
@@ -132,4 +109,4 @@ echo "      'micromamba deactivate'"
 echo "  You can remove the environment with:"
 echo "      'micromamba env remove -n $ENV_NAME'"
 echo "  Run the app:"
-echo "      'gradio app.py --demo-name=app'"
+echo "      'gradio app.py'"
