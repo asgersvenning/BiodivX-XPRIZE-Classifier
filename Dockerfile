@@ -85,13 +85,13 @@ COPY --chown=user:user . /home/user/app
 # # Check if the SSH key is working
 # RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
 
-# # Install the flat-bug
-# RUN git clone git@github.com:darsa-group/flat-bug.git && \
-#     cd flat-bug && \
-#     git fetch && \
-#     git checkout dev_experiments && \
-#     git pull && \
-#     python3.11 -m pip install -e .
+# # Install classification dependency
+# RUN git clone <REPO> && \
+#    cd <REPO> && \
+#    git checkout <BRANCH> && \
+#    git fetch && \
+#    git pull && \
+#    pip install -e . <REPO>
 
 # Expose the necessary port for Gradio
 EXPOSE 7860
