@@ -19,7 +19,7 @@ cd "$HOME/BiodivX-XPRIZE-Classifier"
 ```
 
 ## Run pipeline
-Input should be a path or glob pattern to the image(s) to classify.
+Input should be a path or glob pattern to the image(s) to classify. If it is a .txt file, then it should contain lines corresponding to the former.
 
 ```bash
 python classify.py [-h] --input [<INPUT_IMAGES> ...] [--output <OUTPUT_CSV>] [--weights <WEIGHT_PATH>] [--class_dict <CLASS_DICT_CSV>] [--device <DEVICE>]

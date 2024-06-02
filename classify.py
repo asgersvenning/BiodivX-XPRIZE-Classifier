@@ -34,7 +34,13 @@ def type_of_path(file_path):
     else:
         return 'unknown'
     
-def get_images(input_path_dir_globs : List[str]) -> List[str]:
+def get_images(input_path_dir_globs : Union[str, List[str]]) -> List[str]:
+    if isinstance(input_path_dir_globs, str):
+        if input_path_dir_globs.endswith('.txt'):
+            with open(input_path_dir_globs, 'r') as f:
+                input_path_dir_globs = f.read().splitlines()
+        else:
+            input_path_dir_globs = [input_path_dir_globs]
     images = []
     for path in input_path_dir_globs:
         match type_of_path(path):
@@ -290,7 +296,7 @@ if __name__ == "__main__":
     import argparse
 
     args_parser = argparse.ArgumentParser(description="Classify images of bugs.")
-    args_parser.add_argument('-i', '--input', type=str, nargs="+", help='Path(s), director(y/ies) or glob(s) to such. Outputs will be saved in the output directory.', required=True)
+    args_parser.add_argument('-i', '--input', type=str, nargs="+", help='Path(s), director(y/ies) or glob(s) to such. If a .txt then it each line should correspond to the former. Outputs will be saved in the output directory.', required=True)
     args_parser.add_argument("-o", "--output", type=str, help="The output CSV file. If not specified it will be dumped in stdout.", required=False)
     args_parser.add_argument("--weights", type=str, help="The path to the weights file. Default is 'classification_weights.pth'.")
     args_parser.add_argument("--class_dict", type=str, help="The path to the class_dict CSV. Default is 'class_dict.csv'.")
