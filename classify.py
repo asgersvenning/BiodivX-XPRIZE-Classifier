@@ -226,7 +226,7 @@ class Resnet50Classifier(torch.nn.Module):
 
         data = dict()
         data["Predicted"] = labels
-        data["Probability"] = scores
+        data["Confidence"] = scores
         data.update({
             self.category_map[c] : predictions[:, c].tolist() for c in range(predictions.shape[1])
         })
