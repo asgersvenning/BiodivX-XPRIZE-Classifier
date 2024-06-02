@@ -12,11 +12,14 @@ import torch.nn as nn
 from torchvision import models
 from torchvision.models import ResNet50_Weights
 
-# Input parsing
+# Input parsing 
 IMG_REGEX = re.compile(r'\.(jp[e]{0,1}g|png)$', re.IGNORECASE)
 
 def is_image(file_path):
-    return bool(re.search(IMG_REGEX, file_path)) & os.path.isfile(file_path)
+    return bool(re.search(IMG_REGEX, file_path)) and os.path.isfile(file_path)
+
+def is_txt(file_path):
+    return file_path.endswith('.txt') and os.path.isfile(file_path)
 
 def is_dir(file_path):
     return os.path.isdir(file_path)
@@ -27,25 +30,27 @@ def is_glob(file_path):
 def type_of_path(file_path):
     if is_image(file_path):
         return 'image'
+    elif is_txt(file_path):
+        return 'txt'
     elif is_dir(file_path):
         return 'dir'
     elif is_glob(file_path):
         return 'glob'
     else:
         return 'unknown'
-    
+
 def get_images(input_path_dir_globs : Union[str, List[str]]) -> List[str]:
     if isinstance(input_path_dir_globs, str):
-        if input_path_dir_globs.endswith('.txt'):
-            with open(input_path_dir_globs, 'r') as f:
-                input_path_dir_globs = f.read().splitlines()
-        else:
-            input_path_dir_globs = [input_path_dir_globs]
+        input_path_dir_globs = [input_path_dir_globs]
     images = []
     for path in input_path_dir_globs:
         match type_of_path(path):
             case 'image':
                 images.append(path)
+            case 'txt':
+                with open(path, 'r') as f:
+                    paths = [path.strip() for path in f.readlines() if len(path.strip()) > 0]
+                images.extend(get_images(paths))
             case 'dir':
                 images.extend(glob.glob(os.path.join(path, '*')))
             case 'glob':
