@@ -1,4 +1,4 @@
-import os, csv, io
+import os, csv, io, uuid
 
 from urllib.request import urlretrieve
 from typing import List, Tuple, Optional, Union, Callable
@@ -173,7 +173,7 @@ def cell_formatter(v : Union[int, float, str], digits : int) -> str:
         return f"{v * 100:.{digits}f}%"
     return str(v)
 
-def dict2csv(d : dict, digits : int=1) -> str:
+def dict2csv(d : dict, digits : int=1, write : bool=False) -> str:
     csv = []
     columns = list(d.keys())
     col_widths = get_col_width(d, cell_formatter, digits=digits)
@@ -190,7 +190,17 @@ def dict2csv(d : dict, digits : int=1) -> str:
     for row in range(rows):
         csv.append(row_spec.format(*[cell_formatter(d[col][row], digits) for col in columns]))
     # csv.append(horiz_rule)
-    return "\n".join(csv)
+    csv_content = "\n".join(csv)
+    if write:
+        unique_prefix = str(uuid.uuid4())[::3]
+        csv_path = f"output/{unique_prefix}_rich_classification.csv"
+        with open(csv_path, "w") as f:
+            f.write(csv_content)
+        return csv_path
+    else:
+        return csv_content
+
+        
 
 if __name__ == "__main__":
     import sys, argparse, glob, re, contextlib
