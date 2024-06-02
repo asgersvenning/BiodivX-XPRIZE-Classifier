@@ -11,6 +11,7 @@ import torchvision
 import torch.nn as nn
 from torchvision import models
 from torchvision.models import ResNet50_Weights
+from torchvision.transforms import functional as tvf
 
 # Input parsing 
 IMG_REGEX = re.compile(r'\.(jp[e]{0,1}g|png)$', re.IGNORECASE)
@@ -183,7 +184,25 @@ def parse_image(images : Optional[Union[np.ndarray, bytes, str, Union[List[Union
         image = image[:3]
         image[:, alpha == 0] = 255
 
+    # Pad images to square
+    h, w = image.shape[1:]
+    print("H, W", h, w)
+    if h != w:
+        size = max(h, w)
+        horizontal_error = size - w
+        vertical_error = size - h
+        left = horizontal_error // 2
+        right = horizontal_error - left
+        top = vertical_error // 2
+        bottom = vertical_error - top
+        image = torch.nn.functional.pad(image, (left, right, top, bottom), value=255)
+
     return image
+
+def plot_images(images : torch.Tensor):
+    n_images = len(images)
+    nrow = int(n_images ** 0.5)
+    torchvision.utils.save_image(images, "output.png", nrow=nrow)
 
 class toFloat32:
     def __init__(self, *args, **kwargs):
@@ -201,7 +220,11 @@ class Resnet50Classifier(torch.nn.Module):
         self.weights = weights
         with open(category_map) as f:
             reader = csv.reader(f)
-            self.category_map = {int(rows[0]): rows[1] for i, rows in enumerate(reader) if i != 0}
+            rows = list(reader)
+            self.category_map = {int(cols[0]): cols[1] for i, cols in enumerate(rows) if i != 0}
+            self.means = torch.tensor([float(cols[2]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
+            self.stds = torch.tensor([float(cols[3]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
+            self.thresholds = torch.tensor([float(cols[4]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
         self.device = device
         self.model = self.get_model()
         self.transforms = self.get_transforms()
@@ -228,16 +251,19 @@ class Resnet50Classifier(torch.nn.Module):
             ]
         )
 
-    def post_process_batch(self, output):
-        predictions = torch.nn.functional.softmax(output, dim=1)
+    def post_process_batch(self, output : torch.Tensor) -> dict:
+        above_threshold = output > self.thresholds
+        predictions = torch.stack([torch.distributions.Normal(self.means[0,i], self.stds[0,i]).cdf(output[:,i]) for i in range(output.shape[1])], dim=1) * 100
 
         categories = predictions.argmax(dim=1).tolist()
-        labels = [self.category_map[cat] for cat in categories]
+        prediction_is_above_threshold = [bool(above_threshold[i, c]) for i, c in enumerate(categories)]
+        labels = [self.category_map[cat] if certain else "Unknown" for cat, certain in zip(categories, prediction_is_above_threshold)]
         scores = predictions.max(dim=1).values.tolist()
 
         data = dict()
         data["Predicted"] = labels
         data["Confidence"] = scores
+        data["Unknown"] = [0.0 if certain else 1.0 for certain in prediction_is_above_threshold]
         data.update({
             self.category_map[c] : predictions[:, c].tolist() for c in range(predictions.shape[1])
         })
@@ -254,6 +280,8 @@ class Resnet50Classifier(torch.nn.Module):
             images = [images] 
         images = [self.transforms(image) for image in images]
         images = torch.stack(images)
+        ## DEBUG
+        plot_images(images)
         outputs = torch.zeros((len(images), len(self.category_map)), device=self.device, dtype=torch.float32)
         for i in range(0, len(images), self.batch_size):
             batch = images[i:i+self.batch_size]
@@ -264,7 +292,7 @@ class Resnet50Classifier(torch.nn.Module):
         return self.post_process_batch(outputs)
 
 def main(args : dict):
-    output_stream = io.StringIO() if not args["output"] else sys.stdout
+    output_stream = sys.stdout # io.StringIO() if not args["output"] else sys.stdout
     # Supress all prints here, to ensure that the output is only the JSON string if the output is not specified
     with contextlib.redirect_stdout(output_stream):
         # Get the defaults
