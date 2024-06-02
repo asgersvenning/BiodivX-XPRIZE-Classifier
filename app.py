@@ -1,3 +1,5 @@
+import os
+
 from typing import List, Tuple, Optional, Union
 
 import numpy as np
@@ -25,6 +27,8 @@ with gr.Blocks() as demo:
 
     # Define the localization function
     def classify(images : Optional[Union[np.ndarray, bytes, str, Union[List[Union[np.ndarray, bytes, str]], Tuple[Union[np.ndarray, bytes, str]]]]]) -> Tuple[List[str], List[str]]:
+        if not os.path.exists("output"):
+            os.makedirs("output")
         return postprocess(model.value.predict(images))
 
     # Define the input-output format
