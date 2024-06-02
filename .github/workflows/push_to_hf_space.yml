@@ -13,7 +13,7 @@ jobs:
       uses: nateraw/huggingface-sync-action@v0.0.4
       with:
         github_repo_id: asgersvenning/BiodivX-XPRIZE-Classifier
-        huggingface_repo_id: asgersvenning/BiodivX-XPRIZE-Classifier
+        huggingface_repo_id: STBX/BiodivX-XPRIZE-Classifier
         repo_type: space
         space_sdk: docker
         hf_token: ${{ secrets.HF_TOKEN }}
