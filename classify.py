@@ -279,8 +279,8 @@ class Resnet50Classifier(torch.nn.Module):
             images = [images] 
         images = [self.transforms(image) for image in images]
         images = torch.stack(images)
-        ## DEBUG
-        plot_images(images)
+        # ## DEBUG
+        # plot_images(images)
         outputs = torch.zeros((len(images), len(self.category_map)), device=self.device, dtype=torch.float32)
         for i in range(0, len(images), self.batch_size):
             batch = images[i:i+self.batch_size]
