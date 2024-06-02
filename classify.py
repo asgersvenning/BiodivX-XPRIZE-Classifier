@@ -300,13 +300,13 @@ def main(args : dict):
         input_images = get_images(args["input"])
 
         # Update the parameters
-        if args["class_dict"]:
+        if "class_dict" in args and args["class_dict"] is not None:
             class_dict = args["class_dict"]
 
-        if args["weights"]:
+        if "weights" in args and args["weights"] is not None:
             weights = args["weights"]
 
-        if args["device"]:
+        if "device" in args and args["device"] is not None:
             device = torch.device(args["device"])
 
         # Create the model
@@ -316,7 +316,7 @@ def main(args : dict):
         output = dict2csv(model.predict(input_images)["data"])
 
     # Save the output
-    if args["output"]:
+    if "output" in args and args["output"] is not None:
         if os.path.isdir(args["output"]):
             raise ValueError("Output cannot be a directory.")
         with open(args["output"], "w") as f:
