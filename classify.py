@@ -251,11 +251,13 @@ class Resnet50Classifier(torch.nn.Module):
         )
 
     def post_process_batch(self, output : torch.Tensor) -> dict:
-        above_threshold = output > self.thresholds
-        predictions = torch.stack([torch.distributions.Normal(self.means[0,i], self.stds[0,i]).cdf(output[:,i]) for i in range(output.shape[1])], dim=1) * 100
+        # above_threshold = output > self.thresholds
+        # predictions = torch.stack([torch.distributions.Normal(self.means[0,i], self.stds[0,i]).cdf(output[:,i]) for i in range(output.shape[1])], dim=1) * 100
+        predictions = torch.nn.functional.softmax(output, dim=1)
 
         categories = predictions.argmax(dim=1).tolist()
-        prediction_is_above_threshold = [bool(above_threshold[i, c]) for i, c in enumerate(categories)]
+        # prediction_is_above_threshold = [bool(above_threshold[i, c]) for i, c in enumerate(categories)]
+        prediction_is_above_threshold = [True for i, c in enumerate(categories)]
         labels = [self.category_map[cat] if certain else "Unknown" for cat, certain in zip(categories, prediction_is_above_threshold)]
         scores = predictions.max(dim=1).values.tolist()
 
