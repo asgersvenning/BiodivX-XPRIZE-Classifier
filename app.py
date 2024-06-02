@@ -32,7 +32,7 @@ with gr.Blocks() as demo:
         return postprocess(model.value.predict(images))
 
     # Define the input-output format
-    file_input = gr.Image(value="example_image.jpg", label="Input image")
+    file_input = gr.Image(value="example_image1.jpg", label="Input image")
     label_output = gr.Textbox(label="Classification", type="text")
     rich_output = gr.File(label="Rich Output")
 

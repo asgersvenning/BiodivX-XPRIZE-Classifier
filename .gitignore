@@ -2,7 +2,9 @@ test.zip
 output.zip
 output/**
 test/**
+test.csv
 __pycache__/**
 weights.pt
 flagged/**
 weights.pth
+classification_weights.pth

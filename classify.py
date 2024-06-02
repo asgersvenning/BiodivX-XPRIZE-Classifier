@@ -1,4 +1,4 @@
-import os, csv, io, uuid
+import os, sys, csv, io, uuid, contextlib, re, glob
 
 from urllib.request import urlretrieve
 from typing import List, Tuple, Optional, Union, Callable
@@ -12,6 +12,84 @@ import torch.nn as nn
 from torchvision import models
 from torchvision.models import ResNet50_Weights
 
+# Input parsing
+IMG_REGEX = re.compile(r'\.(jp[e]{0,1}g|png)$', re.IGNORECASE)
+
+def is_image(file_path):
+    return bool(re.search(IMG_REGEX, file_path)) & os.path.isfile(file_path)
+
+def is_dir(file_path):
+    return os.path.isdir(file_path)
+
+def is_glob(file_path):
+    return not (is_image(file_path) or is_dir(file_path))
+
+def type_of_path(file_path):
+    if is_image(file_path):
+        return 'image'
+    elif is_dir(file_path):
+        return 'dir'
+    elif is_glob(file_path):
+        return 'glob'
+    else:
+        return 'unknown'
+    
+def get_images(input_path_dir_globs : List[str]) -> List[str]:
+    images = []
+    for path in input_path_dir_globs:
+        match type_of_path(path):
+            case 'image':
+                images.append(path)
+            case 'dir':
+                images.extend(glob.glob(os.path.join(path, '*')))
+            case 'glob':
+                images.extend(glob.glob(path))
+            case _:
+                raise ValueError(f"Unknown path type: {path}")
+    if len(images) == 0:
+        raise ValueError("No images found")
+    return images
+
+# CSV functions
+def get_col_width(d : dict, formatter : Callable = str, **kwargs) -> List[int]:
+    col_widths = [len(k) for k in d.keys()]
+    for i, col in enumerate(d.keys()):
+        col_widths[i] = max(col_widths[i], max([len(formatter(v, **kwargs)) for v in d[col]]))
+    return col_widths
+
+def cell_formatter(v : Union[int, float, str], digits : int) -> str:
+    if isinstance(v, float):
+        return f"{v * 100:.{digits}f}%"
+    return str(v)
+
+def dict2csv(d : dict, digits : int=1, write : bool=False) -> str:
+    csv = []
+    columns = list(d.keys())
+    col_widths = get_col_width(d, cell_formatter, digits=digits)
+    row_spec = ", ".join([f"{{:<{col_widths[i]}}}" for i in range(len(columns))])
+    header = row_spec.format(*columns)
+    # horiz_rule = "-" * len(header)
+    # csv.append(horiz_rule)
+    csv.append(header)
+    # csv.append(horiz_rule)
+    rows = set([len(v) for v in d.values()])
+    if len(rows) != 1:
+        raise ValueError("All values in the dictionary must have the same length")
+    rows = list(rows)[0]
+    for row in range(rows):
+        csv.append(row_spec.format(*[cell_formatter(d[col][row], digits) for col in columns]))
+    # csv.append(horiz_rule)
+    csv_content = "\n".join(csv)
+    if write:
+        unique_prefix = str(uuid.uuid4())[::3]
+        csv_path = f"output/{unique_prefix}_rich_classification.csv"
+        with open(csv_path, "w") as f:
+            f.write(csv_content)
+        return csv_path
+    else:
+        return csv_content
+
+# Model definition
 class ResNet50(nn.Module):
     def __init__(self, num_classes : int=20):
         """
@@ -44,17 +122,21 @@ class ResNet50(nn.Module):
 
 def get_defaults():
     # Define the model parameters
+    remote_dir = "https://anon.erda.au.dk/share_redirect/aRbj0NCBkf"
     class_dict = "class_dict.csv"
-    weights = "weights.pth"
+    remote_class_dict = "mcc24/model_order_24.05.10/thresholds.csv"
+    weights = "classification_weights.pth"
     remote_weight = "mcc24/model_order_24.05.10/dhc_best_128.pth"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     dtype = torch.float32
 
     # Checks
     if not os.path.exists(class_dict):
-        raise ValueError(f"Could not find {class_dict} file")
+        urlretrieve(f"{remote_dir}/{remote_class_dict}", class_dict)
+    if not os.path.exists(class_dict):
+        raise ValueError(f"Could not find {class_dict} file even after downloading?")
     if not os.path.exists(weights):
-        urlretrieve(f"https://anon.erda.au.dk/share_redirect/aRbj0NCBkf/{remote_weight}", weights)
+        urlretrieve(f"{remote_dir}/{remote_weight}", weights)
     if not os.path.exists(weights):
         raise ValueError(f"Could not find {weights} file even after downloading?")
     
@@ -82,7 +164,15 @@ def parse_image(images : Optional[Union[np.ndarray, bytes, str, Union[List[Union
     image = np.array(images)
 
     # Convert the image to a torch tensor and change from HWC to CHW
-    return torch.from_numpy(image).permute(2, 0, 1).to(device)
+    image = torch.from_numpy(image).permute(2, 0, 1).to(device)
+
+    # Check if the image has an alpha channel
+    if image.shape[0] == 4:
+        alpha = image[3]
+        image = image[:3]
+        image[:, alpha == 0] = 255
+
+    return image
 
 class toFloat32:
     def __init__(self, *args, **kwargs):
@@ -161,99 +251,50 @@ class Resnet50Classifier(torch.nn.Module):
             outputs[i:i+self.batch_size] = output
         
         return self.post_process_batch(outputs)
-    
-def get_col_width(d : dict, formatter : Callable = str, **kwargs) -> List[int]:
-    col_widths = [len(k) for k in d.keys()]
-    for i, col in enumerate(d.keys()):
-        col_widths[i] = max(col_widths[i], max([len(formatter(v, **kwargs)) for v in d[col]]))
-    return col_widths
 
-def cell_formatter(v : Union[int, float, str], digits : int) -> str:
-    if isinstance(v, float):
-        return f"{v * 100:.{digits}f}%"
-    return str(v)
-
-def dict2csv(d : dict, digits : int=1, write : bool=False) -> str:
-    csv = []
-    columns = list(d.keys())
-    col_widths = get_col_width(d, cell_formatter, digits=digits)
-    row_spec = ", ".join([f"{{:<{col_widths[i]}}}" for i in range(len(columns))])
-    header = row_spec.format(*columns)
-    # horiz_rule = "-" * len(header)
-    # csv.append(horiz_rule)
-    csv.append(header)
-    # csv.append(horiz_rule)
-    rows = set([len(v) for v in d.values()])
-    if len(rows) != 1:
-        raise ValueError("All values in the dictionary must have the same length")
-    rows = list(rows)[0]
-    for row in range(rows):
-        csv.append(row_spec.format(*[cell_formatter(d[col][row], digits) for col in columns]))
-    # csv.append(horiz_rule)
-    csv_content = "\n".join(csv)
-    if write:
-        unique_prefix = str(uuid.uuid4())[::3]
-        csv_path = f"output/{unique_prefix}_rich_classification.csv"
-        with open(csv_path, "w") as f:
-            f.write(csv_content)
-        return csv_path
-    else:
-        return csv_content
-
-        
-
-if __name__ == "__main__":
-    import sys, argparse, glob, re, contextlib
-
-    is_image_regex = re.compile(r"\.(png|jp[e]{0,1}g|bmp|tiff|gif)$", re.IGNORECASE)
-
-    parser = argparse.ArgumentParser(description="Localize bugs in images")
-    parser.add_argument("-i", "--input", type=str, help="The input image(s) as a path to a image, a folder containing image or a glob to such", required=True)
-    parser.add_argument("-o", "--output", type=str, help="The output CSV file. If not specified it will be dumped in stdout.", required=False)
-    parser.add_argument("--weights", type=str, help="The path to the weights file")
-    parser.add_argument("--class_dict", type=str, help="The path to the class_dict CSV")
-    parser.add_argument("--device", type=str, help="The device to use")
-    args = parser.parse_args()
-
-    output_stream = io.StringIO() if not args.output else sys.stdout
+def main(args : dict):
+    output_stream = io.StringIO() if not args["output"] else sys.stdout
     # Supress all prints here, to ensure that the output is only the JSON string if the output is not specified
     with contextlib.redirect_stdout(output_stream):
         # Get the defaults
         class_dict, weights, device, dtype = get_defaults()
 
+        input_images = get_images(args["input"])
+
         # Update the parameters
-        if args.class_dict:
-            class_dict = args.class_dict
+        if args["class_dict"]:
+            class_dict = args["class_dict"]
 
-        if args.weights:
-            weights = args.weights
+        if args["weights"]:
+            weights = args["weights"]
 
-        if args.device:
-            device = torch.device(args.device)
+        if args["device"]:
+            device = torch.device(args["device"])
 
         # Create the model
         model = Resnet50Classifier(weights=weights, category_map=class_dict, device=device)
 
-        # Get the image paths
-        if os.path.isdir(args.input):
-            image_paths = glob.glob(os.path.join(args.input, "*"))
-        elif os.path.isfile(args.input):
-            image_paths = [args.input]
-        else:
-            image_paths = glob.glob(args.input)
-
-        # Filter the image paths
-        image_paths = [image_path for image_path in image_paths if is_image_regex.search(image_path)]
-        if len(image_paths) == 0:
-            print("No images found")
-            exit(1)
-
         # Run the model
-        output = dict2csv(model.predict(image_paths)["data"])
+        output = dict2csv(model.predict(input_images)["data"])
 
     # Save the output
-    if args.output:
-        with open(args.output, "w") as f:
+    if args["output"]:
+        if os.path.isdir(args["output"]):
+            raise ValueError("Output cannot be a directory.")
+        with open(args["output"], "w") as f:
             f.write(output)
     else:
         print(output)
+
+if __name__ == "__main__":
+    import argparse
+
+    args_parser = argparse.ArgumentParser(description="Classify images of bugs.")
+    args_parser.add_argument('-i', '--input', type=str, nargs="+", help='Path(s), director(y/ies) or glob(s) to such. Outputs will be saved in the output directory.', required=True)
+    args_parser.add_argument("-o", "--output", type=str, help="The output CSV file. If not specified it will be dumped in stdout.", required=False)
+    args_parser.add_argument("--weights", type=str, help="The path to the weights file. Default is 'classification_weights.pth'.")
+    args_parser.add_argument("--class_dict", type=str, help="The path to the class_dict CSV. Default is 'class_dict.csv'.")
+    args_parser.add_argument("--device", type=str, help="The device to use defaults to 'cuda:0' if available else 'cpu'")
+    args = args_parser.parse_args()
+
+    main(vars(args))

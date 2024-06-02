@@ -22,8 +22,29 @@ cd "$HOME/BiodivX-XPRIZE-Classifier"
 Input should be a path or glob pattern to the image(s) to classify.
 
 ```bash
-python classify.py [-h] --input <INPUT_IMAGES> [--output <OUTPUT_CSV>] [--weights <WEIGHT_PATH>] [--class_dict <CLASS_DICT_CSV>] [--device <DEVICE>]
+python classify.py [-h] --input [<INPUT_IMAGES> ...] [--output <OUTPUT_CSV>] [--weights <WEIGHT_PATH>] [--class_dict <CLASS_DICT_CSV>] [--device <DEVICE>]
+```
+
+**Example:**
+
+```bash
+python classify.py --input example_image1.jpg example_image2.png
 ```
 
 # Output
-The output is a formatted CSV which will be output in `stdout` or in the file specified by the `-o`/`--output` flag.
+The output is a formatted CSV (delimiter `,`) which will be output in `stdout` or in the file specified by the `-o`/`--output` flag.
+
+The CSV has the columns:
+
+1) `Predicted`: The predicted class of the image.
+2) `Confidence`: The confidence of the prediction.
+3) `<Class_0>`: The confidence of the prediction for the first class with the name `<Class_0>`.
+4) `<Class_1>`: The confidence of the prediction for the second class with the name `<Class_1>`.
+
+    .   
+    .   
+    .
+
+5) `<Class_N>`: The confidence of the prediction for the last class with the name `<Class_N>`.
+
+For consistency the confidences are always formatted as `X*.X%` where `X` is a digit. All cells follow the following format `<SPACE><CONTENT><SPACE>*` where `CONTENT` is the content of the cell and `<SPACE>` is a space character. The number of spaces afterwards vary, and are determined to ensure that all cells in a column have the same width, when displayed in a monospaced font.
