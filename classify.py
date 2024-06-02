@@ -186,7 +186,6 @@ def parse_image(images : Optional[Union[np.ndarray, bytes, str, Union[List[Union
 
     # Pad images to square
     h, w = image.shape[1:]
-    print("H, W", h, w)
     if h != w:
         size = max(h, w)
         horizontal_error = size - w
