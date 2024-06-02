@@ -80,7 +80,7 @@ ENV HOME=/home/user \
 WORKDIR $HOME/app
 
 # Copy the current directory contents into the container at /home/user/app with the new user ownership
-COPY --chown=user:user . /home/user/app
+COPY --chown=user:user . $HOME/app
 
 # # Check if the SSH key is working
 # RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
