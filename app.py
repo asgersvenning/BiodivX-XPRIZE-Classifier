@@ -18,12 +18,22 @@ with gr.Blocks() as demo:
 
     class_dict, weights, device, dtype = get_defaults()
 
+    # Create button for enabling, disabling TTA
+    tta_button = gr.Button(value="❌ Test-Time Augmentation is off! ❌", variant="secondary", size="sm")
+
+    # Create a function to toggle TTA
+    def toggle_tta():
+        model.value.tta_enabled = not model.value.tta_enabled
+        return "✅ Test-Time Augmentation is on! ✅" if model.value.tta_enabled else "❌ Test-Time Augmentation is off! ❌"
+
     # Create a model loader
     def get_model():
-        return Resnet50Classifier(weights, class_dict, device)
+        return Resnet50Classifier(weights, class_dict, device, test_time_augmentation=False)
     
     # Load the model in the app state
     model = gr.State(get_model)
+
+    tta_button.click(toggle_tta, outputs=[tta_button])
 
     # Define the localization function
     def classify(images : Optional[Union[np.ndarray, bytes, str, Union[List[Union[np.ndarray, bytes, str]], Tuple[Union[np.ndarray, bytes, str]]]]]) -> Tuple[List[str], List[str]]:

@@ -1,7 +1,7 @@
 import os, sys, csv, io, uuid, contextlib, re, glob
 
 from urllib.request import urlretrieve
-from typing import List, Tuple, Optional, Union, Callable
+from typing import List, Tuple, Optional, Union, Callable, Any
 
 import numpy as np
 from PIL import Image
@@ -214,7 +214,7 @@ class Resnet50Classifier(torch.nn.Module):
     input_size = 300
     batch_size = 16
 
-    def __init__(self, weights, category_map, device):
+    def __init__(self, weights : str, category_map : str, device : Any, test_time_augmentation : bool=False):
         super().__init__()
         self.weights = weights
         with open(category_map) as f:
@@ -227,6 +227,8 @@ class Resnet50Classifier(torch.nn.Module):
         self.device = device
         self.model = self.get_model()
         self.transforms = self.get_transforms()
+        self.augmentations = self.get_augmentations()
+        self.tta_enabled = test_time_augmentation
 
     def get_model(self):
         num_classes = len(self.category_map)
@@ -247,6 +249,20 @@ class Resnet50Classifier(torch.nn.Module):
                 torchvision.transforms.Resize((self.input_size, self.input_size)),
                 toFloat32(),
                 torchvision.transforms.Normalize(mean, std),
+            ]
+        )
+    
+    def get_augmentations(self) -> torchvision.transforms.Compose:
+        return torchvision.transforms.Compose(
+            [
+                torchvision.transforms.RandomHorizontalFlip(),
+                torchvision.transforms.RandomVerticalFlip(),
+                torchvision.transforms.RandomRotation(90),
+                torchvision.transforms.RandomAffine(0, scale=(0.9, 1.1)),
+                torchvision.transforms.RandomAffine(0, shear=5),
+                # torchvision.transforms.RandomInvert(), 
+                # torchvision.transforms.RandomAutocontrast(),
+                # torchvision.transforms.RandomErasing(),
             ]
         )
 
@@ -276,23 +292,27 @@ class Resnet50Classifier(torch.nn.Module):
         }
     
     def predict(self, images):
-        images = parse_image(images, self.device)
-        if not isinstance(images, list):
+        # print(type(images), type(images[0]), type(images[0][0]))
+        if not isinstance(images, (list, tuple)):
             images = [images] 
-        images = [self.transforms(image) for image in images]
-        images = torch.stack(images)
         # ## DEBUG
         # plot_images(images)
         outputs = torch.zeros((len(images), len(self.category_map)), device=self.device, dtype=torch.float32)
         for i in range(0, len(images), self.batch_size):
-            batch = images[i:i+self.batch_size]
+            batch = parse_image(images[i:i+self.batch_size], device=self.device)
+            # print(batch, type(batch), type(batch[0]))
+            batch = torch.stack([self.transforms(image) for image in batch])
             with torch.no_grad():
-                output = self.model(batch)
+                if self.tta_enabled:
+                    output = torch.stack([self.model(self.augmentations(batch)) for _ in range(10)]).logsumexp(dim=0)    
+                else:
+                    output = self.model(batch)
             outputs[i:i+self.batch_size] = output
         
         return self.post_process_batch(outputs)
 
 def main(args : dict):
+
     output_stream = sys.stdout # io.StringIO() if not args["output"] else sys.stdout
     # Supress all prints here, to ensure that the output is only the JSON string if the output is not specified
     with contextlib.redirect_stdout(output_stream):
@@ -312,7 +332,7 @@ def main(args : dict):
             device = torch.device(args["device"])
 
         # Create the model
-        model = Resnet50Classifier(weights=weights, category_map=class_dict, device=device)
+        model = Resnet50Classifier(weights=weights, category_map=class_dict, device=device, test_time_augmentation=True)
 
         # Run the model
         output = dict2csv(model.predict(input_images)["data"])
