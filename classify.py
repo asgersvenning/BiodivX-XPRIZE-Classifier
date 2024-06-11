@@ -210,13 +210,48 @@ class toFloat32:
     def __call__(self, image):
         return (image.float() / 255.0)
 
-class Resnet50Classifier(torch.nn.Module):
+class BaseClassifier(torch.nn.Module):
+    def __init__(self, weights : Any, device : Any, test_time_augmentation : bool=False, *args, **kwargs):
+        self.weights = weights
+        self.device = device
+        self.tta_enabled = test_time_augmentation
+        super().__init__(*args, **kwargs)
+        self.model = self.get_model()
+        self.transforms = self.get_transforms()
+        self.augmentations = self.get_augmentations()
+    
+    def get_model(self):
+        raise NotImplementedError("get_model method must be implemented in the subclass")
+        # IMPLEMENT HERE ==> Define and load the model to be used for inference.
+    
+    def get_transforms(self) -> torchvision.transforms.Compose:
+        raise NotImplementedError("get_transforms method must be implemented in the subclass")
+        # IMPLEMENT HERE ==> Define the transformations to be used during inference; i.e. preprocessing the input.
+    
+    def get_augmentations(self) -> torchvision.transforms.Compose:
+        raise NotImplementedError("get_augmentations method must be implemented in the subclass")
+        # IMPLEMENT HERE ==> Define the augmentations to be used during test time augmentation.
+    
+    def post_process_batch(self, output : Any) -> dict:
+        raise NotImplementedError("post_process_batch method must be implemented in the subclass")
+        # IMPLEMENT HERE ==> Take whatever output the model gives and convert it to a dictionary of the following format:
+        # return {
+        #   "class" : List[str], # The predicted class for each image
+        #   "score" : List[float], # The confidence score for the predicted class for each image
+        #   "data" : dict # The data dictionary containing the scores for all classes for each image
+        # }
+
+    def predict(self, images : Optional[Union[str, bytes, np.ndarray, List[Optional[Union[str, bytes, np.ndarray]]], Tuple[Optional[Union[str, bytes, np.ndarray]]]]]) -> dict:
+        raise NotImplementedError("predict method must be implemented in the subclass")
+        # IMPLEMENT HERE ==> Batched inference of model on `images` -> `output`:
+        # output = ...
+        # return self.post_process_batch(output)
+
+class Resnet50Classifier(BaseClassifier):
     input_size = 300
     batch_size = 16
 
-    def __init__(self, weights : str, category_map : str, device : Any, test_time_augmentation : bool=False):
-        super().__init__()
-        self.weights = weights
+    def __init__(self, category_map : str, device : Any, *args, **kwargs):
         with open(category_map) as f:
             reader = csv.reader(f)
             rows = list(reader)
@@ -224,11 +259,7 @@ class Resnet50Classifier(torch.nn.Module):
             self.means = torch.tensor([float(cols[2]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
             self.stds = torch.tensor([float(cols[3]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
             self.thresholds = torch.tensor([float(cols[4]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
-        self.device = device
-        self.model = self.get_model()
-        self.transforms = self.get_transforms()
-        self.augmentations = self.get_augmentations()
-        self.tta_enabled = test_time_augmentation
+        super().__init__(device=device, *args, **kwargs)
 
     def get_model(self):
         num_classes = len(self.category_map)
