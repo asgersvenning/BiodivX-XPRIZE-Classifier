@@ -23,6 +23,8 @@ UBUNTU_VERSION="22.04"
 CUDA_VERSION="12.2"
 NVIDIA_DRIVER_VERSION="535.161.07"
 
+PWD=$(pwd)
+
 # Function to check OS and CUDA version
 check_system_requirements() {
     # Check OS
@@ -92,6 +94,34 @@ if [ ! "$(pip show gradio)" ]; then
 else
     echo "gradio already installed. Skipping installation."
 fi
+
+# Install fastai
+if [ ! "$(pip show fastai)" ]; then
+    if ! micromamba install fastai -c fastai -c pytorch -c conda-forge -y; then
+        echo "Failed to install fastai."
+        handle_error
+    fi
+else
+    echo "fastai already installed. Skipping installation."
+fi
+
+# Install insectnet; i.e. the insect classifier
+if [ ! "$(pip show xprize_insectnet)" ]; then
+    cd $HOME
+    if [ ! -d "insectnet" ]; then
+        if ! git clone git@github.com:GuillaumeMougeot/insectnet.git; then
+            echo "Failed to clone insectnet repository."
+            handle_error
+        fi
+    fi
+    cd insectnet
+    git pull
+    pip install -e .
+else
+    echo "insectnet already installed. Skipping installation."
+fi
+
+cd $PWD
 
 # Deactivate the environment to restore the original environment
 micromamba deactivate

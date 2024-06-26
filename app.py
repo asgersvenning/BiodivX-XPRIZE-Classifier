@@ -6,7 +6,7 @@ import numpy as np
 
 import gradio as gr
 
-from classify import Resnet50Classifier, get_defaults, dict2csv, cell_formatter
+from classify import Resnet50Classifier, HierarchicalClassifier, get_defaults, dict2csv, cell_formatter
 
 def postprocess(predictions):
     return (
@@ -28,7 +28,8 @@ with gr.Blocks() as demo:
 
     # Create a model loader
     def get_model():
-        return Resnet50Classifier(weights=weights, category_map=class_dict, device=device, test_time_augmentation=False)
+        # return Resnet50Classifier(weights=weights, category_map=class_dict, device=device, test_time_augmentation=False)
+        return HierarchicalClassifier(weights=weights, device=device, test_time_augmentation=False)
     
     # Load the model in the app state
     model = gr.State(get_model)

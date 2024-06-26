@@ -1,7 +1,8 @@
-import os, sys, csv, io, uuid, contextlib, re, glob, json
+import os, sys, csv, json, io, uuid, contextlib, re, glob
 
+from io import BytesIO
 from urllib.request import urlretrieve
-from typing import List, Tuple, Optional, Union, Callable, Any
+from typing import List, Tuple, Dict, Optional, Union, Callable, Any
 
 import numpy as np
 from PIL import Image
@@ -14,6 +15,14 @@ from torchvision.models import ResNet50_Weights
 from torchvision.transforms import functional as tvf
 
 from fastai.vision.learner import load_learner
+from xprize_insectnet.hierarchical.model import model_from_state_file
+
+# Constants
+key_to_name_path = os.path.join(os.path.dirname(__file__), "clean_class_to_name.json")
+if not os.path.exists(key_to_name_path):
+    urlretrieve("https://anon.erda.au.dk/share_redirect/aRbj0NCBkf/clean_class_to_name.json", key_to_name_path)
+with open(key_to_name_path) as f:
+    KEY_TO_NAME = json.load(f)
 
 # Input parsing 
 IMG_REGEX = re.compile(r'\.(jp[e]{0,1}g|png)$', re.IGNORECASE)
@@ -103,44 +112,13 @@ def dict2csv(d : dict, digits : int=1, write : bool=False) -> str:
     else:
         return csv_content
 
-# Model definition
-class ResNet50(nn.Module):
-    def __init__(self, num_classes : int=20):
-        """
-        Initialize model.
-        """
-        super(ResNet50, self).__init__()
-
-        self.expansion = 4
-        self.out_channels = 512
-        
-        self.model_ft = models.resnet50(weights=ResNet50_Weights.DEFAULT)
-
-        self.model_ft.fc = nn.Identity() # Do nothing just pass input to output
-
-        self.drop = nn.Dropout(p=0.5)
-        self.linear_lvl1 = nn.Linear(self.out_channels*self.expansion, self.out_channels)
-        self.relu_lv1 = nn.ReLU(inplace=False)
-        self.softmax_reg1 = nn.Linear(self.out_channels, num_classes)
-
-    def forward(self, x : torch.Tensor) -> torch.Tensor:
-        """
-        Forward propagation of pretrained ResNet-50.
-        """
-        x = self.model_ft(x)
-        x = self.drop(x) 
-        x = self.linear_lvl1(x)
-        x = self.relu_lv1(x)
-        x = self.softmax_reg1(x)
-        return x
-
 def get_defaults():
     # Define the model parameters
     remote_dir = "https://anon.erda.au.dk/share_redirect/aRbj0NCBkf"
     class_dict = "class_dict.csv"
     remote_class_dict = "mcc24/model_order_24.05.10/thresholds.csv"
-    weights = "classification_weights.pth"
-    remote_weight = "mcc24/model_order_24.05.10/dhc_best_128.pth"
+    weights = "efficientnet_v2_s___hierarchical.state" # "classification_weights.pth"
+    remote_weight = "hierarchical/effnetv2s_sgfoc_train_v3_1/efficientnet_v2_s___epoch_8_batch_22000.state" # "mcc24/model_order_24.05.10/dhc_best_128.pth"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     dtype = torch.float32
 
@@ -248,42 +226,25 @@ class BaseClassifier(torch.nn.Module):
         # IMPLEMENT HERE ==> Batched inference of model on `images` -> `output`:
         # output = ...
         # return self.post_process_batch(output)
-
-class Resnet50Classifier(BaseClassifier):
-    input_size = 300
+    
+class HierarchicalClassifier(BaseClassifier):
     batch_size = 16
 
-    def __init__(self, category_map : str, device : Any, *args, **kwargs):
-        with open(category_map) as f:
-            reader = csv.reader(f)
-            rows = list(reader)
-            self.category_map = {int(cols[0]): cols[1] for i, cols in enumerate(rows) if i != 0}
-            self.means = torch.tensor([float(cols[2]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
-            self.stds = torch.tensor([float(cols[3]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
-            self.thresholds = torch.tensor([float(cols[4]) for i, cols in enumerate(rows) if i != 0], device=device).unsqueeze(0)
-        super().__init__(device=device, *args, **kwargs)
+    def __init__(self, dtype=torch.bfloat16, *args, **kwargs):
+        self.dtype = dtype
+        super().__init__(*args, **kwargs)
+
+    @property
+    def n_levels(self):
+        return len(self.model.class_handles["n_classes"])
 
     def get_model(self):
-        num_classes = len(self.category_map)
-        model = ResNet50(num_classes=num_classes)
-        model = model.to(self.device)
-        # state_dict = torch.hub.load_state_dict_from_url(weights_url)
-        checkpoint = torch.load(self.weights, map_location=self.device)
-        # The model state dict is nested in some checkpoints, and not in others
-        state_dict = checkpoint.get("model_state_dict") or checkpoint
-        model.load_state_dict(state_dict)
+        model = model_from_state_file(self.weights, device=self.device, dtype=self.dtype)
         model.eval()
         return model
-
+    
     def get_transforms(self) -> torchvision.transforms.Compose:
-        mean, std = [0, 0, 0], [1, 1, 1] # [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]
-        return torchvision.transforms.Compose(
-            [
-                torchvision.transforms.Resize((self.input_size, self.input_size)),
-                toFloat32(),
-                torchvision.transforms.Normalize(mean, std),
-            ]
-        )
+        return self.model.default_transform
     
     def get_augmentations(self) -> torchvision.transforms.Compose:
         return torchvision.transforms.Compose(
@@ -298,49 +259,68 @@ class Resnet50Classifier(BaseClassifier):
                 # torchvision.transforms.RandomErasing(),
             ]
         )
-
+    
     def post_process_batch(self, output : torch.Tensor) -> dict:
-        # above_threshold = output > self.thresholds
-        # predictions = torch.stack([torch.distributions.Normal(self.means[0,i], self.stds[0,i]).cdf(output[:,i]) for i in range(output.shape[1])], dim=1) * 100
-        predictions = torch.nn.functional.softmax(output, dim=1)
+        this_batch_len = len(output[0])
+        predictions = [torch.nn.functional.softmax(output, dim=1) for output in output]
+        categories = [prediction.argmax(dim=1).tolist() for prediction in predictions]
+        labels = [[self.model.class_handles["idx_to_class"][level][c] for c in cat] for level, cat in enumerate(categories)]
+        scores = [prediction.max(dim=1).values.tolist() for prediction in predictions]
 
-        categories = predictions.argmax(dim=1).tolist()
-        # prediction_is_above_threshold = [bool(above_threshold[i, c]) for i, c in enumerate(categories)]
-        prediction_is_above_threshold = [True for i, c in enumerate(categories)]
-        labels = [self.category_map[cat] if certain else "Unknown" for cat, certain in zip(categories, prediction_is_above_threshold)]
-        scores = predictions.max(dim=1).values.tolist()
+        # Choose the first prediction that is above the threshold
+        category = []
+        label = []
+        score = []
+
+        threshold = 0
+        for item in range(len(categories[0])):
+            for level in range(self.n_levels):
+                if scores[level][item] > threshold:
+                    category.append(categories[level][item])
+                    label.append(labels[level][item])
+                    score.append(scores[level][item])
+                    break
+            else:
+                category.append(-1)
+                label.append("Unknown")
+                score.append(0.0)
+
+        label = [" | ".join([KEY_TO_NAME[lab] if label != 'Unknown' else 'Unknown' for lab in label]) for i in range(this_batch_len)]
 
         data = dict()
-        data["Predicted"] = labels
-        data["Confidence"] = scores
-        data["Unknown"] = [0.0 if certain else 1.0 for certain in prediction_is_above_threshold]
-        data.update({
-            self.category_map[c] : predictions[:, c].tolist() for c in range(predictions.shape[1])
-        })
+        data["Predicted"] = label
+        data["Confidence"] = score
+        data["Unknown"] = [0.0 if c != -1 else 1.0 for c in category]
+        for level in range(self.n_levels):
+            this_level_predictions = predictions[level].T.tolist()
+            data.update({
+                KEY_TO_NAME[self.model.class_handles["idx_to_class"][level][c]] : this_level_predictions[c]  for c in range(len(predictions[level][0]))
+            })
 
         return {
-            "class" : labels,
-            "score" : scores,
+            "class" : label,
+            "score" : score,
             "data" : data
         }
-    
+
     def predict(self, images):
         # print(type(images), type(images[0]), type(images[0][0]))
         if not isinstance(images, (list, tuple)):
             images = [images] 
         # ## DEBUG
         # plot_images(images)
-        outputs = torch.zeros((len(images), len(self.category_map)), device=self.device, dtype=torch.float32)
+        outputs = [torch.zeros((len(images), self.model.class_handles["n_classes"][level]), device=self.device, dtype=self.dtype) for level in range(self.n_levels)]
         for i in range(0, len(images), self.batch_size):
             batch = parse_image(images[i:i+self.batch_size], device=self.device)
-            # print(batch, type(batch), type(batch[0]))
-            batch = torch.stack([self.transforms(image) for image in batch])
+            batch = torch.stack([self.transforms(image) for image in batch]).to(self.device, self.dtype)
             with torch.no_grad():
                 if self.tta_enabled:
-                    output = torch.stack([self.model(self.augmentations(batch)) for _ in range(10)]).logsumexp(dim=0)    
+                    tta_output = [self.model(self.augmentations(batch)) for _ in range(10)]
+                    output = [torch.stack([to[level] for to in tta_output]).logsumexp(dim=0) for level in range(self.n_levels)]
                 else:
                     output = self.model(batch)
-            outputs[i:i+self.batch_size] = output
+            for level in range(self.n_levels):
+                outputs[level][i:i+self.batch_size] = output[level]
         
         return self.post_process_batch(outputs)
 
@@ -491,6 +471,7 @@ def main(args : dict):
         # Create the model
         # model = Resnet50Classifier(weights=weights, category_map=class_dict, device=device, test_time_augmentation=True)
         model = FastaiClassifier(weights=weights, category_map=class_dict, device=device)
+        model = HierarchicalClassifier(weights=weights, device=device, test_time_augmentation=False)
 
         # Run the model
         output = dict2csv(model.predict(input_images)["data"])
