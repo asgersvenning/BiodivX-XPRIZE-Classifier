@@ -289,7 +289,7 @@ class HierarchicalClassifier(BaseClassifier):
                 score.append(0.0)
                 predict_level.append("None")
 
-        label = [" | ".join([KEY_TO_NAME[lab] if label != 'Unknown' else 'Unknown' for lab in label]) for i in range(this_batch_len)]
+        label = [KEY_TO_NAME[lab] if label != 'Unknown' else 'Unknown' for lab in label]
 
         data = OrderedDict()
         data["Predicted"] = label
