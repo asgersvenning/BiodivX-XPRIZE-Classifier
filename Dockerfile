@@ -23,44 +23,44 @@ RUN python3.11 -m pip install --upgrade pip
 # Set up a new user named "user" with user ID 1000
 RUN useradd -m -u 1000 user
 
-# # Switch to the user while doing secret setup
-# USER root
+# Switch to the user while doing secret setup
+USER root
 
-# # Print openssl version
-# RUN openssl version
+# Print openssl version
+RUN openssl version
 
-# # Add the encrypted SSH key to the container
-# COPY id_rsa.enc /home/user/.ssh/id_rsa.enc
+# Add the encrypted SSH key to the container
+COPY id_rsa.enc /home/user/.ssh/id_rsa.enc
 
-# # Add the secret passphrase for decryption
-# RUN --mount=type=secret,id=EncryptionPassphrase \
-#     mkdir -p /home/user/.ssh && \
-#     cat /run/secrets/EncryptionPassphrase | tr -d '\r' > /home/user/.ssh/passphrase
+# Add the secret passphrase for decryption
+RUN --mount=type=secret,id=EncryptionPassphrase \
+    mkdir -p /home/user/.ssh && \
+    cat /run/secrets/EncryptionPassphrase | tr -d '\r' > /home/user/.ssh/passphrase
 
-# # Add SSH key secret and perform necessary setup as root user
-# RUN openssl enc -aes-256-cbc -d -in /home/user/.ssh/id_rsa.enc -out /home/user/.ssh/id_rsa -pass file:/home/user/.ssh/passphrase && \
-#     chmod 600 /home/user/.ssh/id_rsa
+# Add SSH key secret and perform necessary setup as root user
+RUN openssl enc -aes-256-cbc -d -in /home/user/.ssh/id_rsa.enc -out /home/user/.ssh/id_rsa -pass file:/home/user/.ssh/passphrase && \
+    chmod 600 /home/user/.ssh/id_rsa
 
-# # Generate the public key
-# RUN ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
-#     chmod 644 /home/user/.ssh/id_rsa.pub
+# Generate the public key
+RUN ssh-keygen -y -f /home/user/.ssh/id_rsa > /home/user/.ssh/id_rsa.pub && \
+    chmod 644 /home/user/.ssh/id_rsa.pub
 
-# # Add GitHub to known hosts
-# RUN ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
-#     chown -R user:user /home/user/.ssh
+# Add GitHub to known hosts
+RUN ssh-keyscan github.com >> /home/user/.ssh/known_hosts && \
+    chown -R user:user /home/user/.ssh
 
-# # Create SSH config
-# RUN echo "Host *\n    StrictHostKeyChecking no\n" > /home/user/.ssh/config && \
-#     chmod 600 /home/user/.ssh/config
+# Create SSH config
+RUN echo "Host *\n    StrictHostKeyChecking no\n" > /home/user/.ssh/config && \
+    chmod 600 /home/user/.ssh/config
 
-# # Debug: Load the expected SHA256SUM of the SSH key
-# ARG GithubTokenSHA256SUM
+# Debug: Load the expected SHA256SUM of the SSH key
+ARG GithubTokenSHA256SUM
 
-# # Debug: Print the hashes of the SSH key to verify its integrity
-# RUN sha256sum /home/user/.ssh/id_rsa
+# Debug: Print the hashes of the SSH key to verify its integrity
+RUN sha256sum /home/user/.ssh/id_rsa
 
-# # Debug: Check the hashes match the expected value
-# RUN test "$(sha256sum /home/user/.ssh/id_rsa | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM" && echo "Secrets match" || echo "Secrets do not match"
+# Debug: Check the hashes match the expected value
+RUN test "$(sha256sum /home/user/.ssh/id_rsa | cut -d ' ' -f 1)" = "$GithubTokenSHA256SUM" && echo "Secrets match" || echo "Secrets do not match"
 
 # Switch to the user account
 USER user
@@ -70,7 +70,8 @@ RUN which python3.11 && python3.11 --version
 
 # Pre-create the environment to speed up the build and improve caching
 RUN python3.11 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121 && \
-    python3.11 -m pip install gradio
+    python3.11 -m pip install gradio && \
+    python3.11 -m pip install fastai 
 
 # Set home to the user's home directory and ensure PATH includes user's local bin
 ENV HOME=/home/user \
@@ -92,6 +93,11 @@ COPY --chown=user:user . $HOME/app
 #    git fetch && \
 #    git pull && \
 #    pip install -e . <REPO>
+
+RUN git clone git@github.com:GuillaumeMougeot/insectnet.git && \
+   cd insectnet && \
+   pip install -e . &&
+   cd ..
 
 # Expose the necessary port for Gradio
 EXPOSE 7860

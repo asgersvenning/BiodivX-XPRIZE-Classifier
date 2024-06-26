@@ -9,4 +9,6 @@ weights.pt
 flagged/**
 weights.pth
 classification_weights.pth
-*.state
+**.state
+**.pth
+**.pt

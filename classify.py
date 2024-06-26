@@ -1,6 +1,7 @@
 import os, sys, csv, json, io, uuid, contextlib, re, glob
 
 from io import BytesIO
+from collections import OrderedDict
 from urllib.request import urlretrieve
 from typing import List, Tuple, Dict, Optional, Union, Callable, Any
 
@@ -9,15 +10,13 @@ from PIL import Image
 
 import torch
 import torchvision
-import torch.nn as nn
-from torchvision import models
-from torchvision.models import ResNet50_Weights
-from torchvision.transforms import functional as tvf
 
 from fastai.vision.learner import load_learner
 from xprize_insectnet.hierarchical.model import model_from_state_file
 
 # Constants
+LEVELS = ["Species", "Genus", "Family", "Order", "Class", "Phylum", "Kingdom", "Domain"]
+
 key_to_name_path = os.path.join(os.path.dirname(__file__), "clean_class_to_name.json")
 if not os.path.exists(key_to_name_path):
     urlretrieve("https://anon.erda.au.dk/share_redirect/aRbj0NCBkf/clean_class_to_name.json", key_to_name_path)
@@ -82,10 +81,11 @@ def get_col_width(d : dict, formatter : Callable = str, **kwargs) -> List[int]:
 
 def cell_formatter(v : Union[int, float, str], digits : int) -> str:
     if isinstance(v, float):
-        return f"{v * 100:.{digits}f}%"
+        # return f"{v * 100:.{digits}f}%"
+        return f"{v:.{digits}f}"
     return str(v)
 
-def dict2csv(d : dict, digits : int=1, write : bool=False) -> str:
+def dict2csv(d : dict, digits : int=3, write : bool=False) -> str:
     csv = []
     columns = list(d.keys())
     col_widths = get_col_width(d, cell_formatter, digits=digits)
@@ -112,27 +112,29 @@ def dict2csv(d : dict, digits : int=1, write : bool=False) -> str:
     else:
         return csv_content
 
-def get_defaults():
+def get_defaults(model_type : str="hierarchical") -> Tuple[str, str, torch.device, torch.dtype]:
+    if not model_type in ["hierarchical", "fastai"]:
+        raise ValueError(f"Unknown model type: {model_type}")
     # Define the model parameters
     remote_dir = "https://anon.erda.au.dk/share_redirect/aRbj0NCBkf"
-    class_dict = "class_dict.csv"
-    remote_class_dict = "mcc24/model_order_24.05.10/thresholds.csv"
-    weights = "efficientnet_v2_s___hierarchical.state" # "classification_weights.pth"
-    remote_weight = "hierarchical/effnetv2s_sgfoc_train_v3_1/efficientnet_v2_s___epoch_8_batch_22000.state" # "mcc24/model_order_24.05.10/dhc_best_128.pth"
+    class_handles = "class_handles.json"
+    remote_class_handles = "class_handles.json"
+    weights = "efficientnet_v2_s___hierarchical.state" if model_type == "hierarchical" else "multi-label_classification_fastai_long-train_export.pth"
+    remote_weight = "hierarchical/effnetv2s_sgfoc_train_v3_1/efficientnet_v2_s___epoch_8_batch_22000.state" if model_type == "hierarchical" else "fastai/multi-label_classification_fastai_long-train_export.pth"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     dtype = torch.float32
 
     # Checks
-    if not os.path.exists(class_dict):
-        urlretrieve(f"{remote_dir}/{remote_class_dict}", class_dict)
-    if not os.path.exists(class_dict):
-        raise ValueError(f"Could not find {class_dict} file even after downloading?")
+    if not os.path.exists(class_handles):
+        urlretrieve(f"{remote_dir}/{remote_class_handles}", class_handles)
+    if not os.path.exists(class_handles):
+        raise ValueError(f"Could not find {class_handles} file even after downloading?")
     if not os.path.exists(weights):
         urlretrieve(f"{remote_dir}/{remote_weight}", weights)
     if not os.path.exists(weights):
         raise ValueError(f"Could not find {weights} file even after downloading?")
     
-    return class_dict, weights, device, dtype
+    return class_handles, weights, device, dtype
 
 def parse_image(images : Optional[Union[np.ndarray, bytes, str, Union[List[Union[np.ndarray, bytes, str]], Tuple[Union[np.ndarray, bytes, str]]]]], device : Union[torch.device, str]="cpu"):
     # Cases:
@@ -190,12 +192,11 @@ class toFloat32:
     def __call__(self, image):
         return (image.float() / 255.0)
 
-class BaseClassifier(torch.nn.Module):
+class BaseClassifier:
     def __init__(self, weights : Any, device : Any, test_time_augmentation : bool=False, *args, **kwargs):
         self.weights = weights
         self.device = device
         self.tta_enabled = test_time_augmentation
-        super().__init__(*args, **kwargs)
         self.model = self.get_model()
         self.transforms = self.get_transforms()
         self.augmentations = self.get_augmentations()
@@ -272,25 +273,29 @@ class HierarchicalClassifier(BaseClassifier):
         label = []
         score = []
 
-        threshold = 0
+        threshold = 0.05
+        predict_level = []
         for item in range(len(categories[0])):
             for level in range(self.n_levels):
                 if scores[level][item] > threshold:
                     category.append(categories[level][item])
                     label.append(labels[level][item])
                     score.append(scores[level][item])
+                    predict_level.append(LEVELS[level])
                     break
             else:
                 category.append(-1)
                 label.append("Unknown")
                 score.append(0.0)
+                predict_level.append("None")
 
         label = [" | ".join([KEY_TO_NAME[lab] if label != 'Unknown' else 'Unknown' for lab in label]) for i in range(this_batch_len)]
 
-        data = dict()
+        data = OrderedDict()
         data["Predicted"] = label
         data["Confidence"] = score
         data["Unknown"] = [0.0 if c != -1 else 1.0 for c in category]
+        data["Level"] = predict_level
         for level in range(self.n_levels):
             this_level_predictions = predictions[level].T.tolist()
             data.update({
@@ -360,11 +365,11 @@ def get_last_true(l, reverse=False):
         return i-1
 
 class FastaiClassifier(BaseClassifier):
-    def __init__(self, category_map : str, device : Any, *args, **kwargs):
-        with open(category_map, "r") as f:
-            self.category_map = json.load(f)
-        self.class_to_idx = self.category_map["class_to_idx"]
-        self.idx_to_class = self.category_map["idx_to_class"]
+    def __init__(self, class_handles : str, device : Any, *args, **kwargs):
+        with open(class_handles, "r") as f:
+            self.class_handles = json.load(f)
+        self.class_to_idx = self.class_handles["class_to_idx"]
+        self.idx_to_class = self.class_handles["idx_to_class"]
         super().__init__(device=device, *args, **kwargs)
         
     def get_model(self):
@@ -401,7 +406,7 @@ class FastaiClassifier(BaseClassifier):
 
         # Get the scores and classes
         best_scores_taxa = [get_last_true(best_scores[:, i] > 0.5, reverse=True) for i in range(num_images)] # (n)
-        scores = [best_scores[i][j] for j, i in enumerate(best_scores_taxa)]
+        scores = [float(best_scores[i][j]) for j, i in enumerate(best_scores_taxa)]
         classes = [best_classes[i][j] for j, i in enumerate(best_scores_taxa)]
         
         # Get data
@@ -410,10 +415,15 @@ class FastaiClassifier(BaseClassifier):
         for i in range(num_images):
             flatten_all_scores += [np.concatenate([s[i,:] for s in all_scores])] 
         flatten_all_scores = np.array(flatten_all_scores).T # (5*ni, n)
-        data = {k:v for k,v in zip(flatten_sorted_vocab, flatten_all_scores)}
+        data = OrderedDict()
 
-        data["Predicted"] = classes
+        data["Predicted"] = [KEY_TO_NAME[c] if u != -1 else "Unknown" for c, u in zip(classes, best_scores_taxa)]
         data["Confidence"] = scores
+        data["Unknown"] = [0.0 if c != -1 else 1.0 for c in best_scores_taxa]
+        data["Level"] = [LEVELS[u] if u != -1 else "None" for u in best_scores_taxa]
+        data.update(
+            {KEY_TO_NAME[k] : v.tolist() for k, v in zip(flatten_sorted_vocab, flatten_all_scores)}
+        )
 
         return {
             "class" : classes,
@@ -453,14 +463,20 @@ def main(args : dict):
     output_stream = sys.stdout # io.StringIO() if not args["output"] else sys.stdout
     # Supress all prints here, to ensure that the output is only the JSON string if the output is not specified
     with contextlib.redirect_stdout(output_stream):
+
+        if "model_type" in args and args["model_type"] is not None:
+            model_type = args["model_type"]
+        else:
+            model_type = "hierarchical"
+
         # Get the defaults
-        class_dict, weights, device, dtype = get_defaults()
+        class_handles, weights, device, dtype = get_defaults(model_type=model_type)
 
         input_images = get_images(args["input"])
 
         # Update the parameters
-        if "class_dict" in args and args["class_dict"] is not None:
-            class_dict = args["class_dict"]
+        if "class_handles" in args and args["class_handles"] is not None:
+            class_handles = args["class_handles"]
 
         if "weights" in args and args["weights"] is not None:
             weights = args["weights"]
@@ -469,12 +485,15 @@ def main(args : dict):
             device = torch.device(args["device"])
 
         # Create the model
-        # model = Resnet50Classifier(weights=weights, category_map=class_dict, device=device, test_time_augmentation=True)
-        model = FastaiClassifier(weights=weights, category_map=class_dict, device=device)
-        model = HierarchicalClassifier(weights=weights, device=device, test_time_augmentation=False)
+        if model_type == "fastai":
+            model = FastaiClassifier(weights=weights, class_handles=class_handles, device=device)
+        elif model_type == "hierarchical":
+            model = HierarchicalClassifier(weights=weights, device=device, test_time_augmentation=False)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
 
         # Run the model
-        output = dict2csv(model.predict(input_images)["data"])
+        output = dict2csv(model.predict(input_images)["data"], digits=3)
 
     # Save the output
     if "output" in args and args["output"] is not None:
@@ -493,8 +512,9 @@ if __name__ == "__main__":
     args_parser = argparse.ArgumentParser(description="Classify images of bugs.")
     args_parser.add_argument('-i', '--input', type=str, nargs="+", help='Path(s), director(y/ies) or glob(s) to such. If a .txt then it each line should correspond to the former. Outputs will be saved in the output directory.', required=True)
     args_parser.add_argument("-o", "--output", type=str, help="The output CSV file. If not specified it will be dumped in stdout.", required=False)
-    args_parser.add_argument("--weights", type=str, help="The path to the weights file. Default is 'classification_weights.pth'.")
-    args_parser.add_argument("--class_dict", type=str, help="The path to the class_dict CSV. Default is 'class_dict.csv'.")
+    args_parser.add_argument("-m", "--model_type", type=str, default="hierarchical", help="The model type to use. Defaults to 'hierarchical'.")
+    args_parser.add_argument("--weights", type=str, help="The path to the weights file. Default depends on model type.")
+    args_parser.add_argument("--class_handles", type=str, help="The path to the class handles json.")
     args_parser.add_argument("--device", type=str, help="The device to use defaults to 'cuda:0' if available else 'cpu'")
     args = args_parser.parse_args()
 
