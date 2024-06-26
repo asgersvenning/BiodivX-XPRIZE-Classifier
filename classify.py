@@ -1,4 +1,4 @@
-import os, sys, csv, io, uuid, contextlib, re, glob
+import os, sys, csv, io, uuid, contextlib, re, glob, json
 
 from urllib.request import urlretrieve
 from typing import List, Tuple, Optional, Union, Callable, Any
@@ -12,6 +12,8 @@ import torch.nn as nn
 from torchvision import models
 from torchvision.models import ResNet50_Weights
 from torchvision.transforms import functional as tvf
+
+from fastai.vision.learner import load_learner
 
 # Input parsing 
 IMG_REGEX = re.compile(r'\.(jp[e]{0,1}g|png)$', re.IGNORECASE)
@@ -342,6 +344,130 @@ class Resnet50Classifier(BaseClassifier):
         
         return self.post_process_batch(outputs)
 
+def gen_level_idx(vocab, taxa):
+    """Return a dictionary with "species":[False, True, ....]
+    """
+    # taxa list of list
+    if type(taxa)==dict:
+        taxa_lofl = [list(t.keys()) for t in taxa.values()]
+    elif type(taxa)==list:
+        taxa_lofl = [list(t.keys()) for t in taxa]
+    else:
+        raise NotImplementedError(f"Unknown type for taxa {type(taxa)}. Please implement it")
+    indices = np.ones(len(vocab), dtype=int)*-1
+    for i,v in enumerate(vocab):
+        for j in range(len(taxa_lofl)):
+            if v in taxa_lofl[j]:
+                indices[i] = j
+                break 
+    if -1 in indices:
+       print(f"[Warning] Missing values in taxa dictionary: {len(np.array(vocab)[np.array(indices)==-1])}.")
+    return indices
+
+def get_last_true(l, reverse=False):
+    """Browse boolean list to search for the last True in list. Can be done backwards.
+    Return list index. Return -1 if only False in list.
+    """
+    if reverse: 
+        i = len(l)-1
+        while i >= 0 and l[i]:
+            i -= 1 
+        return -1 if i==len(l)-1 else i+1
+    else:
+        i = 0
+        while i < len(l) and l[i]:
+            i += 1 
+        return i-1
+
+class FastaiClassifier(BaseClassifier):
+    def __init__(self, category_map : str, device : Any, *args, **kwargs):
+        with open(category_map, "r") as f:
+            self.category_map = json.load(f)
+        self.class_to_idx = self.category_map["class_to_idx"]
+        self.idx_to_class = self.category_map["idx_to_class"]
+        super().__init__(device=device, *args, **kwargs)
+        
+    def get_model(self):
+        model = load_learner(self.weights, cpu=True)
+        model.model.eval().to(self.device)
+        return model
+    
+    def get_transforms(self) -> torchvision.transforms.Compose:
+        return
+    
+    def get_augmentations(self) -> torchvision.transforms.Compose:
+        return
+    
+    def post_process_batch(self, output : Any) -> dict:
+        # Apply activation
+        sigmoid = lambda z: 1 / (1 + np.exp(-z))
+        all_scores = [sigmoid(p) for p in output] # (5,n,ni)
+        num_taxa = len(all_scores)
+        num_images = len(all_scores[0])
+
+        # Get the best score per taxa for all images
+        best_scores = np.array([np.max(a, axis=1) for a in all_scores]) # (5,n)
+        
+
+        # Get the corresponding best class per taxa for all images
+        ## Generate indices for taxa levels
+        vocab = np.array(self.model.dls.vocab)
+        indices = gen_level_idx(vocab=vocab, taxa=self.class_to_idx)
+        indices = torch.from_numpy(indices)
+        ## Generate a vocab for each taxa
+        sorted_vocab = [vocab[indices==i] for i in range(num_taxa)]
+        ## Best classes
+        best_classes = [sorted_vocab[i][np.argmax(a, axis=1)] for i, a in enumerate(all_scores)] # (5,n)
+
+        # Get the scores and classes
+        best_scores_taxa = [get_last_true(best_scores[:, i] > 0.5, reverse=True) for i in range(num_images)] # (n)
+        scores = [best_scores[i][j] for j, i in enumerate(best_scores_taxa)]
+        classes = [best_classes[i][j] for j, i in enumerate(best_scores_taxa)]
+        
+        # Get data
+        flatten_sorted_vocab = np.concatenate(sorted_vocab) # (5*ni)
+        flatten_all_scores = [] # (n, 5*ni)
+        for i in range(num_images):
+            flatten_all_scores += [np.concatenate([s[i,:] for s in all_scores])] 
+        flatten_all_scores = np.array(flatten_all_scores).T # (5*ni, n)
+        data = {k:v for k,v in zip(flatten_sorted_vocab, flatten_all_scores)}
+
+        data["Predicted"] = classes
+        data["Confidence"] = scores
+
+        return {
+            "class" : classes,
+            "score" : scores,
+            "data" : data
+        }
+
+    def predict(self, images : Optional[Union[str, bytes, np.ndarray, List[Optional[Union[str, bytes, np.ndarray]]], Tuple[Optional[Union[str, bytes, np.ndarray]]]]]) -> dict:
+        if not isinstance(images, (list, tuple)):
+            images = [images] 
+        
+        # Creating test DataLoader
+        test_dl = self.model.dls.test_dl(images)
+
+        # Generate indices for taxa levels
+        indices = gen_level_idx(vocab=list(self.model.dls.vocab), taxa=self.class_to_idx)
+        indices = torch.from_numpy(indices)
+
+        # Running predictions
+        num_levels = len(self.class_to_idx)
+        preds = [[] for _ in range(num_levels)]
+
+        with torch.no_grad():
+            for batch in test_dl:
+                logits = self.model.model(batch[0].to(self.device)).detach()
+                for i in range(num_levels):
+                    preds[i].append(logits[:, (indices == i).nonzero().flatten()].cpu().numpy())
+        
+        # Concatenating predictions
+        for i in range(num_levels):
+            preds[i] = np.concatenate(preds[i])
+
+        return self.post_process_batch(preds)
+
 def main(args : dict):
 
     output_stream = sys.stdout # io.StringIO() if not args["output"] else sys.stdout
@@ -363,7 +489,8 @@ def main(args : dict):
             device = torch.device(args["device"])
 
         # Create the model
-        model = Resnet50Classifier(weights=weights, category_map=class_dict, device=device, test_time_augmentation=True)
+        # model = Resnet50Classifier(weights=weights, category_map=class_dict, device=device, test_time_augmentation=True)
+        model = FastaiClassifier(weights=weights, category_map=class_dict, device=device)
 
         # Run the model
         output = dict2csv(model.predict(input_images)["data"])
