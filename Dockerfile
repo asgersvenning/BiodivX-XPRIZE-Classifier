@@ -84,7 +84,7 @@ WORKDIR $HOME/app
 COPY --chown=user:user . $HOME/app
 
 # # Check if the SSH key is working
-# RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
+RUN git ls-remote git@github.com:github/gitignore.git > /dev/null 2>&1 || exit 1
 
 # # Install classification dependency
 # RUN git clone <REPO> && \
@@ -96,7 +96,7 @@ COPY --chown=user:user . $HOME/app
 
 RUN git clone git@github.com:GuillaumeMougeot/insectnet.git && \
    cd insectnet && \
-   pip install -e . &&
+   pip install -e . && \
    cd ..
 
 # Expose the necessary port for Gradio
