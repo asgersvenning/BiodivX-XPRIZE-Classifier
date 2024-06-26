@@ -273,7 +273,7 @@ class HierarchicalClassifier(BaseClassifier):
         label = []
         score = []
 
-        threshold = 0.05
+        threshold = 0.5
         predict_level = []
         for item in range(len(categories[0])):
             for level in range(self.n_levels):
@@ -303,8 +303,8 @@ class HierarchicalClassifier(BaseClassifier):
             })
 
         return {
-            "class" : label,
-            "score" : score,
+            "class" : data["Predicted"],
+            "score" : data["Confidence"],
             "data" : data
         }
 
@@ -426,8 +426,8 @@ class FastaiClassifier(BaseClassifier):
         )
 
         return {
-            "class" : classes,
-            "score" : scores,
+            "class" : data["Predicted"],
+            "score" : data["Confidence"],
             "data" : data
         }
 
