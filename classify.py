@@ -1,6 +1,6 @@
-import os, sys, csv, json, io, uuid, contextlib, re, glob
+import os, sys, json, io, contextlib, re, glob
 
-from io import BytesIO
+from copy import deepcopy
 from collections import OrderedDict
 from urllib.request import urlretrieve
 from typing import List, Tuple, Dict, Optional, Union, Callable, Any
@@ -296,19 +296,20 @@ class HierarchicalClassifier(BaseClassifier):
         overall["Confidence"] = score
         overall["Unknown"] = [0.0 if c != -1 else 1.0 for c in category]
         overall["Level"] = predict_level
-        for level in range(self.n_levels):
-            this_level_predictions = predictions[level].T.tolist()
-            overall.update({
-                KEY_TO_NAME[self.model.class_handles["idx_to_class"][level][c]] : this_level_predictions[c]  for c in range(len(predictions[level][0]))
-            })
 
         # Create a summary dictionary of the best prediction from each level
         # Two keys for each level: "<level>_class" and "<level>_score"
 
-        short_summary = OrderedDict()
+        short_summary = deepcopy(overall)
         for level in range(self.n_levels):
             short_summary[f"{LEVELS[level]}_class"] = [KEY_TO_NAME[k] for k in labels[level]]
             short_summary[f"{LEVELS[level]}_score"] = scores[level]
+
+        for level in range(self.n_levels):
+            this_level_predictions = predictions[level].T.tolist()
+            overall.update({
+                KEY_TO_NAME[self.model.class_handles["idx_to_class"][level][c]] : this_level_predictions[c] for c in range(len(predictions[level][0]))
+            })
 
         return {
             "class" : overall["Predicted"],
@@ -430,14 +431,15 @@ class FastaiClassifier(BaseClassifier):
         overall["Confidence"] = scores
         overall["Unknown"] = [0.0 if c != -1 else 1.0 for c in best_scores_taxa]
         overall["Level"] = [LEVELS[u] if u != -1 else "None" for u in best_scores_taxa]
-        overall.update(
-            {KEY_TO_NAME[k] : v.tolist() for k, v in zip(flatten_sorted_vocab, flatten_all_scores)}
-        )
 
-        short_summary = OrderedDict()
+        short_summary = deepcopy(overall)
         for i in range(num_taxa):
             short_summary[f"{LEVELS[i]}_class"] = [KEY_TO_NAME[k] for k in best_classes[i].tolist()]
             short_summary[f"{LEVELS[i]}_score"] = best_scores[i].tolist()
+        
+        overall.update(
+            {KEY_TO_NAME[k] : v.tolist() for k, v in zip(flatten_sorted_vocab, flatten_all_scores)}
+        )
 
         return {
             "class" : overall["Predicted"],
@@ -511,14 +513,16 @@ def main(args : dict):
             raise ValueError(f"Unknown model type: {model_type}")
 
         # Run the model
-        output = dict2csv(model.predict(input_images)[output_type], digits=3)
+        # output = dict2csv(model.predict(input_images)[output_type], digits=3)
+        output = model.predict(input_images)
+        output_table = dict2csv(output[output_type], digits=3)
 
     # Save the output
     if not output_path is None:
         with open(output_path, "w") as f:
-            f.write(output)
+            f.write(output_table)
     else:
-        print(output)
+        print(output_table)
 
     return output
 
