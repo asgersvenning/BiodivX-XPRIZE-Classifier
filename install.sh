@@ -1,5 +1,4 @@
 #!/bin/bash
-# Preliminary installation script for the pipeline dependencies and environment
 
 # Function to check if the script is running interactively
 is_interactive() {

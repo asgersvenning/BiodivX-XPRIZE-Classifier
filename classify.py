@@ -85,7 +85,7 @@ def cell_formatter(v : Union[int, float, str], digits : int) -> str:
         return f"{v:.{digits}f}"
     return str(v)
 
-def dict2csv(d : dict, digits : int=3, write : bool=False) -> str:
+def dict2csv(d : dict, digits : int=3) -> str:
     csv = []
     columns = list(d.keys())
     col_widths = get_col_width(d, cell_formatter, digits=digits)
@@ -102,15 +102,7 @@ def dict2csv(d : dict, digits : int=3, write : bool=False) -> str:
     for row in range(rows):
         csv.append(row_spec.format(*[cell_formatter(d[col][row], digits) for col in columns]))
     # csv.append(horiz_rule)
-    csv_content = "\n".join(csv)
-    if write:
-        unique_prefix = str(uuid.uuid4())[::3]
-        csv_path = f"output/{unique_prefix}_rich_classification.csv"
-        with open(csv_path, "w") as f:
-            f.write(csv_content)
-        return csv_path
-    else:
-        return csv_content
+    return "\n".join(csv)
 
 def get_defaults(model_type : str="hierarchical") -> Tuple[str, str, torch.device, torch.dtype]:
     if not model_type in ["hierarchical", "fastai"]:
@@ -268,6 +260,7 @@ class HierarchicalClassifier(BaseClassifier):
         labels = [[self.model.class_handles["idx_to_class"][level][c] for c in cat] for level, cat in enumerate(categories)]
         scores = [prediction.max(dim=1).values.tolist() for prediction in predictions]
 
+        # Create a summary dictionary of the best overall prediction
         # Choose the first prediction that is above the threshold
         category = []
         label = []
@@ -291,21 +284,30 @@ class HierarchicalClassifier(BaseClassifier):
 
         label = [KEY_TO_NAME[lab] if label != 'Unknown' else 'Unknown' for lab in label]
 
-        data = OrderedDict()
-        data["Predicted"] = label
-        data["Confidence"] = score
-        data["Unknown"] = [0.0 if c != -1 else 1.0 for c in category]
-        data["Level"] = predict_level
+        overall = OrderedDict()
+        overall["Predicted"] = label
+        overall["Confidence"] = score
+        overall["Unknown"] = [0.0 if c != -1 else 1.0 for c in category]
+        overall["Level"] = predict_level
         for level in range(self.n_levels):
             this_level_predictions = predictions[level].T.tolist()
-            data.update({
+            overall.update({
                 KEY_TO_NAME[self.model.class_handles["idx_to_class"][level][c]] : this_level_predictions[c]  for c in range(len(predictions[level][0]))
             })
 
+        # Create a summary dictionary of the best prediction from each level
+        # Two keys for each level: "<level>_class" and "<level>_score"
+
+        short_summary = OrderedDict()
+        for level in range(self.n_levels):
+            short_summary[f"{LEVELS[level]}_class"] = [KEY_TO_NAME[k] for k in labels[level]]
+            short_summary[f"{LEVELS[level]}_score"] = scores[level]
+
         return {
-            "class" : data["Predicted"],
-            "score" : data["Confidence"],
-            "data" : data
+            "class" : overall["Predicted"],
+            "score" : overall["Confidence"],
+            "data"  : overall,
+            "short" : short_summary
         }
 
     def predict(self, images):
@@ -415,20 +417,26 @@ class FastaiClassifier(BaseClassifier):
         for i in range(num_images):
             flatten_all_scores += [np.concatenate([s[i,:] for s in all_scores])] 
         flatten_all_scores = np.array(flatten_all_scores).T # (5*ni, n)
-        data = OrderedDict()
+        overall = OrderedDict()
 
-        data["Predicted"] = [KEY_TO_NAME[c] if u != -1 else "Unknown" for c, u in zip(classes, best_scores_taxa)]
-        data["Confidence"] = scores
-        data["Unknown"] = [0.0 if c != -1 else 1.0 for c in best_scores_taxa]
-        data["Level"] = [LEVELS[u] if u != -1 else "None" for u in best_scores_taxa]
-        data.update(
+        overall["Predicted"] = [KEY_TO_NAME[c] if u != -1 else "Unknown" for c, u in zip(classes, best_scores_taxa)]
+        overall["Confidence"] = scores
+        overall["Unknown"] = [0.0 if c != -1 else 1.0 for c in best_scores_taxa]
+        overall["Level"] = [LEVELS[u] if u != -1 else "None" for u in best_scores_taxa]
+        overall.update(
             {KEY_TO_NAME[k] : v.tolist() for k, v in zip(flatten_sorted_vocab, flatten_all_scores)}
         )
 
+        short_summary = OrderedDict()
+        for i in range(num_taxa):
+            short_summary[f"{LEVELS[i]}_class"] = [KEY_TO_NAME[k] for k in best_classes[i].tolist()]
+            short_summary[f"{LEVELS[i]}_score"] = best_scores[i].tolist()
+
         return {
-            "class" : data["Predicted"],
-            "score" : data["Confidence"],
-            "data" : data
+            "class" : overall["Predicted"],
+            "score" : overall["Confidence"],
+            "data" : overall,
+            "short" : short_summary
         }
 
     def predict(self, images : Optional[Union[str, bytes, np.ndarray, List[Optional[Union[str, bytes, np.ndarray]]], Tuple[Optional[Union[str, bytes, np.ndarray]]]]]) -> dict:
@@ -463,16 +471,19 @@ def main(args : dict):
     output_stream = sys.stdout # io.StringIO() if not args["output"] else sys.stdout
     # Supress all prints here, to ensure that the output is only the JSON string if the output is not specified
     with contextlib.redirect_stdout(output_stream):
+        model_type = args.get("model_type", "hierarchical")
 
-        if "model_type" in args and args["model_type"] is not None:
-            model_type = args["model_type"]
-        else:
-            model_type = "hierarchical"
+        input_images = get_images(args["input"])
+
+        output_path = args.get("output", None)
+        if not output_path is not None:
+           if os.path.isdir(args["output"]):
+                raise ValueError("Output cannot be a directory.")
+           
+        output_type = args.get("output_type", "short")
 
         # Get the defaults
         class_handles, weights, device, dtype = get_defaults(model_type=model_type)
-
-        input_images = get_images(args["input"])
 
         # Update the parameters
         if "class_handles" in args and args["class_handles"] is not None:
@@ -493,13 +504,11 @@ def main(args : dict):
             raise ValueError(f"Unknown model type: {model_type}")
 
         # Run the model
-        output = dict2csv(model.predict(input_images)["data"], digits=3)
+        output = dict2csv(model.predict(input_images)[output_type], digits=3)
 
     # Save the output
-    if "output" in args and args["output"] is not None:
-        if os.path.isdir(args["output"]):
-            raise ValueError("Output cannot be a directory.")
-        with open(args["output"], "w") as f:
+    if not output_path is None:
+        with open(output_path, "w") as f:
             f.write(output)
     else:
         print(output)
@@ -512,6 +521,7 @@ if __name__ == "__main__":
     args_parser = argparse.ArgumentParser(description="Classify images of bugs.")
     args_parser.add_argument('-i', '--input', type=str, nargs="+", help='Path(s), director(y/ies) or glob(s) to such. If a .txt then it each line should correspond to the former. Outputs will be saved in the output directory.', required=True)
     args_parser.add_argument("-o", "--output", type=str, help="The output CSV file. If not specified it will be dumped in stdout.", required=False)
+    args_parser.add_argument("-t", "--output_type", type=str, default="short", help="The output type to use. Defaults to 'short'.")
     args_parser.add_argument("-m", "--model_type", type=str, default="hierarchical", help="The model type to use. Defaults to 'hierarchical'.")
     args_parser.add_argument("--weights", type=str, help="The path to the weights file. Default depends on model type.")
     args_parser.add_argument("--class_handles", type=str, help="The path to the class handles json.")
