@@ -79,11 +79,18 @@ def get_col_width(d : dict, formatter : Callable = str, **kwargs) -> List[int]:
         col_widths[i] = max(col_widths[i], max([len(formatter(v, **kwargs)) for v in d[col]]))
     return col_widths
 
-def cell_formatter(v : Union[int, float, str], digits : int) -> str:
+def cell_formatter(v : Union[int, float, str, List[Union[int, float, str]], Tuple[Union[int, float, str]]], digits : int) -> str:
     if isinstance(v, float):
         # return f"{v * 100:.{digits}f}%"
         return f"{v:.{digits}f}"
-    return str(v)
+    elif isinstance(v, (list, tuple)):
+        return ";".join([cell_formatter(vv, digits) for vv in v])
+    elif isinstance(v, int):
+        return str(v)
+    elif isinstance(v, str):
+        return v
+    else:
+        raise ValueError(f"Unknown type: {type(v)}")
 
 def dict2csv(d : dict, digits : int=3) -> str:
     csv = []
