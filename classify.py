@@ -273,7 +273,7 @@ class HierarchicalClassifier(BaseClassifier):
         label = []
         score = []
 
-        threshold = 0.5
+        threshold = 0.15
         predict_level = []
         for item in range(len(categories[0])):
             for level in range(self.n_levels):
