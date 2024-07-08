@@ -230,9 +230,12 @@ class BaseClassifier:
 class HierarchicalClassifier(BaseClassifier):
     batch_size = 16
 
-    def __init__(self, dtype=torch.bfloat16, *args, **kwargs):
+    def __init__(self, dtype=torch.bfloat16, include_embeddings : bool=False, *args, **kwargs):
         self.dtype = dtype
+        self._include_embeddings = include_embeddings
         super().__init__(*args, **kwargs)
+        if self._include_embeddings:
+            self.model.classifier.return_embeddings = True
 
     @property
     def n_levels(self):
@@ -260,7 +263,22 @@ class HierarchicalClassifier(BaseClassifier):
             ]
         )
     
-    def post_process_batch(self, output : torch.Tensor) -> dict:
+    def post_process_batch(self, output : Union[List[torch.Tensor], Tuple[List[torch.Tensor], torch.Tensor]]) -> dict:
+        if self._include_embeddings:
+            embeddings : torch.Tensor   = output[1].float()
+            output : List[torch.Tensor] = output[0]
+
+            if len(embeddings) >= 2:
+                e_pc2_proj = torch.pca_lowrank(embeddings, q=2)[2]
+            else:
+                e_pc2_proj = torch.zeros((len(embeddings), 2), device=embeddings.device, dtype=embeddings.dtype)
+                e_pc2_proj[0] = 1
+            
+            embeddings = embeddings @ e_pc2_proj
+            embeddings = [d.tolist() for d in embeddings.T]
+        else:
+            output : List[torch.Tensor] = output
+
         this_batch_len = len(output[0])
         predictions = [torch.nn.functional.softmax(output, dim=1) for output in output]
         categories = [prediction.argmax(dim=1).tolist() for prediction in predictions]
@@ -296,6 +314,9 @@ class HierarchicalClassifier(BaseClassifier):
         overall["Confidence"] = score
         overall["Unknown"] = [0.0 if c != -1 else 1.0 for c in category]
         overall["Level"] = predict_level
+        if self._include_embeddings:
+            overall["Embedding1"] = embeddings[0]
+            overall["Embedding2"] = embeddings[1]
 
         # Create a summary dictionary of the best prediction from each level
         # Two keys for each level: "<level>_class" and "<level>_score"
@@ -325,17 +346,29 @@ class HierarchicalClassifier(BaseClassifier):
         # ## DEBUG
         # plot_images(images)
         outputs = [torch.zeros((len(images), self.model.class_handles["n_classes"][level]), device=self.device, dtype=self.dtype) for level in range(self.n_levels)]
+        if self._include_embeddings:
+            embeddings = []
         for i in range(0, len(images), self.batch_size):
             batch = parse_image(images[i:i+self.batch_size], device=self.device)
             batch = torch.stack([self.transforms(image) for image in batch]).to(self.device, self.dtype)
             with torch.no_grad():
                 if self.tta_enabled:
                     tta_output = [self.model(self.augmentations(batch)) for _ in range(10)]
-                    output = [torch.stack([to[level] for to in tta_output]).logsumexp(dim=0) for level in range(self.n_levels)]
+                    if self._include_embeddings:
+                        output = [torch.stack([to[0][level] for to in tta_output]).logsumexp(dim=0) for level in range(self.n_levels)], torch.stack([to[1] for to in tta_output]).mean(dim=0)
+                    else:
+                        output = [torch.stack([to[level] for to in tta_output]).logsumexp(dim=0) for level in range(self.n_levels)]
                 else:
                     output = self.model(batch)
             for level in range(self.n_levels):
-                outputs[level][i:i+self.batch_size] = output[level]
+                if self._include_embeddings:
+                    outputs[level][i:i+self.batch_size] = output[0][level]
+                else:
+                    outputs[level][i:i+self.batch_size] = output[level]
+            if self._include_embeddings:
+                embeddings.append(output[1])
+        if self._include_embeddings:
+            outputs = outputs, torch.cat(embeddings)
         
         return self.post_process_batch(outputs)
 
@@ -375,7 +408,9 @@ def get_last_true(l, reverse=False):
         return i-1
 
 class FastaiClassifier(BaseClassifier):
-    def __init__(self, class_handles : str, device : Any, *args, **kwargs):
+    def __init__(self, class_handles : str, device : Any, include_embeddings : bool=False, *args, **kwargs):
+        if include_embeddings:
+            raise TypeError("Fastai model does not support embeddings.")
         with open(class_handles, "r") as f:
             self.class_handles = json.load(f)
         self.class_to_idx = self.class_handles["class_to_idx"]
@@ -491,6 +526,8 @@ def main(args : dict):
            
         output_type = args.get("output_type", "short")
 
+        include_embeddings = args.get("include_embeddings", False)
+
         # Get the defaults
         class_handles, weights, device, dtype = get_defaults(model_type=model_type)
 
@@ -506,9 +543,19 @@ def main(args : dict):
 
         # Create the model
         if model_type == "fastai":
-            model = FastaiClassifier(weights=weights, class_handles=class_handles, device=device)
+            model = FastaiClassifier(
+                weights                 = weights, 
+                class_handles           = class_handles, 
+                device                  = device,
+                include_embeddings      = include_embeddings
+            )
         elif model_type == "hierarchical":
-            model = HierarchicalClassifier(weights=weights, device=device, test_time_augmentation=False)
+            model = HierarchicalClassifier(
+                weights                 = weights, 
+                device                  = device, 
+                test_time_augmentation  = False, 
+                include_embeddings      = include_embeddings
+            )
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
@@ -534,6 +581,7 @@ if __name__ == "__main__":
     args_parser.add_argument("-o", "--output", type=str, help="The output CSV file. If not specified it will be dumped in stdout.", required=False)
     args_parser.add_argument("-t", "--output_type", type=str, default="short", help="The output type to use. Defaults to 'short'.")
     args_parser.add_argument("-m", "--model_type", type=str, default="hierarchical", help="The model type to use. Defaults to 'hierarchical'.")
+    args_parser.add_argument("--include_embeddings", action="store_true", help="Include the embeddings in the output.")
     args_parser.add_argument("--weights", type=str, help="The path to the weights file. Default depends on model type.")
     args_parser.add_argument("--class_handles", type=str, help="The path to the class handles json.")
     args_parser.add_argument("--device", type=str, help="The device to use defaults to 'cuda:0' if available else 'cpu'")
