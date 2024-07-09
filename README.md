@@ -22,7 +22,7 @@ cd "$HOME/BiodivX-XPRIZE-Classifier"
 Input should be a path or glob pattern to the image(s) to classify. If it is a .txt file, then it should contain lines corresponding to the former.
 
 ```bash
-python classify.py [-h] --input [<INPUT_IMAGES> ...] [--output <OUTPUT_CSV>] [--weights <WEIGHT_PATH>] [--class_dict <CLASS_DICT_CSV>] [--device <DEVICE>]
+python classify.py [-h] --input/-i [<INPUT_IMAGES> ...] [--output/-o <OUTPUT_CSV>] [--output_type/-t <OUTPUT_TYPE>] [--model_type/-m <MODEL_TYPE>] [--include_embeddings] [--weights <WEIGHT_PATH>] [--class_handles <CLASS_HANDLES_JSON>] [--device <DEVICE>]
 ```
 
 **Example:**
@@ -47,4 +47,4 @@ The CSV has the columns:
 
 5) `<Class_N>`: The confidence of the prediction for the last class with the name `<Class_N>`.
 
-For consistency the confidences are always formatted as `X*.X%` where `X` is a digit. All cells follow the following format `<SPACE><CONTENT><SPACE>*` where `CONTENT` is the content of the cell and `<SPACE>` is a space character. The number of spaces afterwards vary, and are determined to ensure that all cells in a column have the same width, when displayed in a monospaced font.
+All cells follow the following format `<SPACE><CONTENT><SPACE>*` where `CONTENT` is the content of the cell and `<SPACE>` is a space character. The number of spaces afterwards vary, and are determined to ensure that all cells in a column have the same width, when displayed in a monospaced font.

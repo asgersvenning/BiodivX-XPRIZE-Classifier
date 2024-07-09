@@ -520,7 +520,7 @@ def main(args : dict):
         input_images = get_images(args["input"])
 
         output_path = args.get("output", None)
-        if not output_path is not None:
+        if not output_path is None:
            if os.path.isdir(args["output"]):
                 raise ValueError("Output cannot be a directory.")
            
